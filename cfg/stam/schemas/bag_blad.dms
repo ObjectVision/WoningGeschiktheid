@@ -1,0 +1,151 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                                                                                                  //
+//        Configuratie voor het genereren van vastgoed informatie voor EDM                          //
+//                                                                                                  //
+//                              Object Vision 2017                                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//          Configuratiebestand met schema's om per bag blad de AHN te verwerken                    //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+container bag_blad
+{
+	template verwerk_blad
+	{
+		// begin case parameters
+		parameter<Analyses/Geschiktheid/pand_met_woning/impl/blad> blad_rel;
+		parameter<string> unit;
+		// end case parameters
+
+		container export
+		{
+			parameter<string> generate := 'Ready'
+			,	ExplicitSuppliers = "pand_met_woning_export/identificatie;pand_met_woning_export/hoogte;pand_met_woning_export/hoogte_nok"
+									";pand_met_woning_export/hoogte_maaiveld_offset;pand_met_woning_export/bouwlagen_ahn;pand_met_woning_export/perc_vlak"
+									";pand_met_woning_export/heeftMogelijkLiftschacht";
+
+			unit<uint32> pand_met_woning_export: = pand_met_woning
+			,	StorageName = "='%LocalDataProjDir%/bladen/' + AHNSet + '/pand_met_woning/' + unit + '.fss'"
+			{
+				attribute<string>    identificatie            := pand_met_woning/identificatie;
+				attribute<cm_uint16> hoogte                   := hoogtes_en_daken/hoogte/pand_met_woning_hoogte;
+				attribute<cm_uint16> hoogte_nok               := hoogtes_en_daken/hoogte/nok_hoogte;
+				attribute<cm_uint16> hoogte_maaiveld_offset   := hoogtes_en_daken/hoogte/impl/buffer_hoogte_offset;
+				attribute<uint8>     bouwlagen_ahn            := hoogtes_en_daken/liftschachten/pand_met_woning_alle/bouwlagen_ahn;
+				attribute<float32>   perc_vlak                := rjoin(identificatie, hoogtes_en_daken/liftschachten/pand_met_woning_voor_liftbepaling/identificatie, hoogtes_en_daken/liftschachten/pand_met_woning_voor_liftbepaling/ratio_vlak);
+				attribute<bool>      heeftMogelijkLiftschacht := rjoin(identificatie, hoogtes_en_daken/liftschachten/pand_met_woning_voor_liftbepaling/identificatie, hoogtes_en_daken/liftschachten/pand_met_woning_voor_liftbepaling/heeftMogelijkLiftschacht);
+			}
+		}
+
+		unit<uint32> pand_met_woning := Subset(Analyses/Geschiktheid/pand_met_woning/impl/blad_rel == blad_rel)
+		,	DialogType = "Map"
+		,	DialogData = "geometry"
+		{
+			attribute<Geografie/point_rd> geometry (polygon) := Analyses/Geschiktheid/pand_met_woning/geometry[nr_OrgEntity]
+			{
+				parameter<int16>  PenWidth      := 0s          , DialogType = "PenWidth";
+				parameter<mm>     PenWorldWidth := 0.1[mm]     , DialogType = "PenWorldWidth";
+				parameter<uint32> BrushColor    := rgb(200,0,0), DialogType = "BrushColor";
+				parameter<uint32> PenColor      := rgb( 80,0,0), DialogType = "PenColor";
+			}
+
+			attribute<string>    identificatie           := Analyses/Geschiktheid/pand_met_woning/identificatie[nr_OrgEntity];
+			attribute<jaar>      bouwjaar                := Analyses/Geschiktheid/pand_met_woning/bouwjaar[nr_OrgEntity];
+
+			attribute<uint32>    nr_cellen_vlak          := sum(hoogtes_en_daken/dak/gradient/stijlheid_rel == cl/stijlheid/V/vlak ? 1 : 0, hoogtes_en_daken/pand_met_woning_rel);
+			attribute<uint32>    nr_cellen_met_stijlheid := sum(isDefined(hoogtes_en_daken/dak/gradient/stijlheid_rel)             ? 1 : 0, hoogtes_en_daken/pand_met_woning_rel);
+
+			attribute<ratio>     ratio_vlak              := float32(nr_cellen_vlak) / float32(nr_cellen_met_stijlheid);
+
+			attribute<cm_uint16> hoogte                  := hoogtes_en_daken/hoogte/pand_met_woning_hoogte;
+			attribute<cm_uint16> hoogte_nok              := hoogtes_en_daken/hoogte/nok_hoogte;
+			attribute<cm_uint16> hoogte_maaiveld_offset  := hoogtes_en_daken/hoogte/impl/buffer_hoogte_offset;
+		}
+
+		container AHN
+		{
+			unit<uint32> vlak: nrofrows = 1
+			{
+				parameter<m> buffer:= 2[m];
+				parameter<m> x_min := min(PointCol(lower_bound(pand_met_woning/geometry))) - buffer;
+				parameter<m> x_max := max(PointCol(upper_bound(pand_met_woning/geometry))) + buffer;
+				parameter<m> y_min := min(PointRow(lower_bound(pand_met_woning/geometry))) - buffer;
+				parameter<m> y_max := max(PointRow(upper_bound(pand_met_woning/geometry))) + buffer;
+
+				attribute<point_rd> geometry      (poly) := points2Sequence(pointset/point, const(0[.], pointset), id(pointset));
+				attribute<ipoint>   geometry_ipol (poly) := ipolygon(geometry);
+
+				unit<uint32> pointset := union_unit(vlak, vlak, vlak, vlak, vlak)
+				{
+					attribute<point_rd> point := union_data(.
+						, point(x_min, y_max, point_rd)
+						, point(x_max, y_max, point_rd)
+						, point(x_max, y_min, point_rd)
+						, point(x_min, y_min, point_rd)
+						, point(x_min, y_max, point_rd)
+					);
+				}
+				container Grid := Schemas/define_grid(0.5[m], 0.5[m], vlak);
+			}
+
+			unit<uint32> bladen := Subset(readdomain/overlay/first_rel == blad_rel)
+			{
+				attribute<string> AHN_unit := readdomain/overlay/AHN_UNIT[nr_OrgEntity];
+			}
+
+			container int := merge_AHN_bladen(vlak/Grid/domain, 'int');
+			container ruw := merge_AHN_bladen(vlak/Grid/domain, 'ruw');
+		}
+		container hoogtes_en_daken := bepaal_hoogtes_en_daken(pand_met_woning, AHN/vlak/Grid/domain, AHN/ruw/hoogte_met_offset, AHN/int/hoogte_met_offset);
+	}
+
+	template merge_AHN_bladen
+	{
+		// begin case parameters
+		unit<spoint> GridDomain;
+		parameter<string> type;
+		// end case parameters
+
+		parameter<string> blad_list_expr := asList('Brondata/AHN/'+ AHNSET + '/per_blad/blad_' + bladen/AHN_unit   + '/' + type +'/Grid/BAGPerspectieven/blad_' + UNIT, ',');
+
+		attribute<cm_uint16> hoogte_met_offset (GridDomain) := ='raster_merge(
+			 GridDomain 
+			,cm_uint16
+			,' + blad_list_expr + 
+		')';
+	}
+
+	#include<bepaal_hoogtes_en_daken.dms>
+
+	Template bepaal_buffer_points
+	{
+		// begin template parameters
+		unit<uint32>    pand_met_woning;
+		unit<spoint>    GridDomain;
+		parameter<bool> isMax;
+		// end template parameters
+
+		// grid buffers gebruikt voor bepaling maaiveld hoogte
+		attribute<float32>   proximity_arg   (GridDomain) := isMax ? (float32(pand_met_woning_rel) + 1f) : float32(#pand_met_woning) - (float32(pand_met_woning_rel)); // + 1 is nodig omdat anders de proximity naar pand_met_woning 0 hetzelfde zou zijn als het buitengebied
+		attribute<float32>   proximity_res   (GridDomain) := proximity(proximity_arg, Geografie/kernel_buffer/distMatr);
+		attribute<pand_met_woning> pand_met_woning_met_buffer (GridDomain) := isMax 
+			? (proximity_res - 1f)[pand_met_woning] 
+			: (proximity_res = 0f 
+				? (0 / 0)[pand_met_woning] 
+				: (float32(#pand_met_woning) - proximity_res)[pand_met_woning]);
+
+		attribute<pand_met_woning> buffer (GridDomain) := isDefined(pand_met_woning_rel) ? (0 / 0)[pand_met_woning] : pand_met_woning_met_buffer;
+
+		unit<uint32> buffer_points := Subset(isDefined(buffer) && isDefined(hoogte_int_offset))
+		,	DialogType = "Map"
+		,	DialogData = "point"
+		{
+			attribute<point_rd>        point               := nr_OrgEntity[point_rd];
+			attribute<pand_met_woning> pand_met_woning_rel := buffer[nr_OrgEntity];
+			attribute<cm_uint16>       hoogte_offset       := hoogte_int_offset[nr_OrgEntity];
+		}
+	}
+}

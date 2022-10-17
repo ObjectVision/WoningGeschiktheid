@@ -1,0 +1,38 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                                                                                                  //
+//           Configuratie voor het bepalen van het ongeschikt vastgoed voor ouderen                 //
+//                                                                                                  //
+//                           Stichting InFact & Object Vision 2018                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                         Configuratiebestand met eenheden                                         //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+container Eenheden
+{
+	// visualisatie van layers in mapview, wordt niet mee gerekend dus ook niet als base units geconfigureerd.
+	unit<uint32> color;
+
+	// hoeveelheden
+	unit<int32>   mm         := int32(0.001 * m)       ,label = "millimeter";
+	unit<float32> m          := baseunit('m', float32) ,label = "meter";
+	unit<uint16>  m_uint16   := uint16(m)              ,label = "meter uint16";
+	unit<float32> km         := 1000 * m               ,label = "kilometer";
+	unit<float32> m2         := m * m                  ,label = "meter2"        , cdf = "Klassificaties/cl/m2/ClassBreaks";
+	unit<float32> per_m2     := 1f / m2;
+	unit<float32> cm         := 0.01 * m               ,label = "centimeter";
+	unit<uint16>  cm_uint16  := uint16(cm)             ,label = "centimeter uint16";
+
+	unit<float32> cm_per_m   := cm / m                 ,label = "helling centimeter per strekkende meter";
+	unit<float32> ha         := 100 * 100 * m2         ,label = "hectare";
+	unit<float32> per_ha     := 1 / ha                 ,label = "per hectare";
+
+	unit<float32> ratio      := m / m                  ,label = "ratio"         , cdf = "Klassificaties/cl/ratioEI/ClassBreaks";
+	unit<float32> percentage := 100.0 * ratio          ,label = "percentage"    , cdf = "Klassificaties/cl/percentage/ClassBreaks";
+
+	unit<int16>   jaar;
+	unit<uint8>   verdieping;
+}

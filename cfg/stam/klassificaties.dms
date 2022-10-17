@@ -1,0 +1,316 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                                                                                                  //
+//           Configuratie voor het bepalen van het ongeschikt vastgoed voor ouderen                 //
+//                                                                                                  //
+//                           Stichting InFact & Object Vision 2018                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                     Configuratiebestand met klassificaties                                       //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+container Klassificaties: Using = "Eenheden"
+{
+	container cl
+	{
+		unit<uint8> m2: nrofrows = 4
+		{
+			attribute<eenheden/m2> ClassBreaks: DialogType = "Classification",
+				[0,60,90,120];
+			attribute<color> SymbolColor : DialogType = "SymbolColor",
+				[rgb(128,255,0),rgb(0,128,0),rgb(0,64,128),rgb(255,0,0)];
+			attribute<color> BrushColor := SymbolColor, DialogType = "BrushColor";
+		}
+
+		unit<uint8> ratio: nrofrows = 10
+		{
+			attribute<eenheden/ratio> ClassBreaks: DialogType = "Classification",
+			[
+				 0
+				,0.05, 0.07, 0.09,0.12
+				,0.15, 0.20 ,0.25,0.35
+				,5
+			];
+			attribute<color> BrushColor: DialogType = "BrushColor",
+			[
+				 rgb(255,255,255)
+				,rgb(255,255,204),rgb(255,237,160),rgb(254,217,118),rgb(254,178, 76)
+				,rgb(253,141, 60),rgb(252, 78, 42),rgb(227, 26, 28),rgb(189,  0, 38)
+				,rgb(128,  0, 38)
+			];
+			attribute<color> PenColor    := BrushColor, DialogType = "PenColor";
+			attribute<color> SymbolColor := BrushColor, DialogType = "SymbolColor";
+		}
+		unit<uint8> ratioEI: nrofrows = 10
+		{
+			attribute<eenheden/ratio> ClassBreaks: DialogType = "Classification",
+			[
+				 0
+				,0.1, 0.2, 0.3,0.4
+				,0.5, 0.6 ,0.7,0.8
+				,0.9
+			];
+			attribute<color> BrushColor: DialogType = "BrushColor",
+			[
+				 rgb(255,255,255)
+				,rgb(255,255,204),rgb(255,237,160),rgb(254,217,118),rgb(254,178, 76)
+				,rgb(253,141, 60),rgb(252, 78, 42),rgb(227, 26, 28),rgb(189,  0, 38)
+				,rgb(128,  0, 38)
+			];
+			attribute<color> PenColor    := BrushColor, DialogType = "PenColor";
+			attribute<color> SymbolColor := BrushColor, DialogType = "SymbolColor";
+		}
+		unit<uint8> cmDif: nrofrows = 10
+		{
+			attribute<eenheden/cm> ClassBreaks: DialogType = "Classification",
+			[
+				 0
+				,10, 20, 50,100
+				,150, 200 ,300, 450
+				,750
+			];
+			attribute<color> BrushColor: DialogType = "BrushColor",
+			[
+				 rgb(255,255,255)
+				,rgb(255,255,204),rgb(255,237,160),rgb(254,217,118),rgb(254,178, 76)
+				,rgb(253,141, 60),rgb(252, 78, 42),rgb(227, 26, 28),rgb(189,  0, 38)
+				,rgb(128,  0, 38)
+			];
+			attribute<color> PenColor    := BrushColor, DialogType = "PenColor";
+			attribute<color> SymbolColor := BrushColor, DialogType = "SymbolColor";
+		}
+
+		unit<uint8> percentage : nrofrows = 10
+		{
+			attribute<eenheden/percentage> ClassBreaks: DialogType = "Classification",
+			[
+				 0
+				, 5, 7, 9,12
+				,15,20,25,35
+				,50
+			];
+			attribute<color> BrushColor: DialogType = "BrushColor",
+			[
+				 rgb(255,255,255)
+				,rgb(255,255,204),rgb(255,237,160),rgb(254,217,118),rgb(254,178, 76)
+				,rgb(253,141, 60),rgb(252, 78, 42),rgb(227, 26, 28),rgb(189,  0, 38)
+				,rgb(128,  0, 38)
+			];
+		}
+
+		unit<uint8> stijlheid : nrofrows = 4
+		{
+			attribute<cm>     ClassBreaks: [0,15,120,200], DialogType = "Classification";
+			attribute<string> label      : ['vlak', 'licht stijl', 'redelijk stijk', 'stijl'], DialogType = "LabelText";
+			attribute<string> name       := replace(label,' ','_');
+			attribute<uint32> BrushColor : [rgb(235,235,235),rgb(165,165,165),rgb(95,95,95),rgb(25,25,25)], DialogType = "BrushColor";
+
+			container V := for_each_nedv(lowercase(name), 'value('+string(id(.))+', ..)', void, .);
+		}
+		
+		unit<uint8> verdiepingshoogte: nrofrows = 5
+		{
+			attribute<jaar>      bouwjaar      :[  0,1911,1941,1981,2005];
+			attribute<cm_uint16> plafondhoogte :[287, 273, 260, 248, 265];
+			parameter<cm_uint16> vloerhoogte   := 38[cm_uint16];
+		}
+	}
+	container co
+	{
+		unit<bool> boolAHN
+		{
+			attribute<color> BrushColor: DialogType = "BrushColor",
+			[
+				4294967295,rgb(0,200,0)
+			];
+			attribute<color> PenColor:= BrushColor, DialogType = "PenColor";
+			attribute<string> label: ['false','true'];
+		}
+		unit<bool> boolWoon
+		{
+			attribute<color> BrushColor: DialogType = "BrushColor",
+			[
+				4294967295,rgb(200,0,0)
+			];
+			attribute<color> PenColor:= BrushColor, DialogType = "PenColor";
+			attribute<string> label: ['false','true'];
+		}
+		unit<uint8> geschikt : nrofrows = 10
+		{
+			attribute<color> BrushColor: DialogType = "BrushColor",
+			[
+				 rgb(255,255,255)
+				,rgb(255,255,204),rgb(255,237,160),rgb(254,217,118),rgb(254,178, 76)
+				,rgb(253,141, 60),rgb(252, 78, 42),rgb(227, 26, 28),rgb(189,  0, 38)
+				,rgb(128,  0, 38)
+			];
+			attribute<string> label: ['geschikt','aanpasbaar','niet te bepalen','ongeschikt'];
+			container V := for_each_nedv(replace(lowercase(label),' ', '_'), 'value('+string(id(.))+', ..)', void, .);
+		}
+		unit<uint8> provincie: nrofrows = 12
+		{
+			parameter<uint32> nrAttr := 2;
+			unit<uint32> Elements    := range(uint32, 0, nrAttr*#.)
+			{
+				attribute<string> Text:
+				[
+					//Name, Label
+					 'GR','Groningen'
+					,'FR','Friesland'
+					,'DR','Drenthe'
+					,'OV','Overijssel'
+					,'FL','Flevoland'
+					,'GE','Gelderland'
+					,'UT','Utrecht'
+					,'NH','Noord-Holland'
+					,'ZH','Zuid-Holland'
+					,'ZE','Zeeland'
+					,'NB','Noord-Brabant'
+					,'LI','Limburg'
+				];
+			}
+			attribute<uint32> nr    := uint32(id(.));
+			attribute<string> name  := Elements/Text[value(nr * nrAttr + 0, Elements)];
+			attribute<string> label := Elements/Text[value(nr * nrAttr + 1, Elements)];
+		}
+		unit<uint8> windstreek: nrofrows = 10
+		{
+			attribute<string> label: ['N', 'NO', 'O', 'ZO', 'Z', 'ZW', 'W', 'NW','vlak','onbekend'], DialogType = "LabelText";
+			attribute<uint32> BrushColor: DialogType = "BrushColor",
+				[
+				  rgb(255,  0,  0),rgb(128,128,  0)
+				 ,rgb(  0,255,  0),rgb(  0,255,255)
+				 ,rgb(  0,  0,255),rgb(128,128,255)
+				 ,rgb(255,255,  0),rgb(255,128,  0)
+				 ,rgb(235,235,235),rgb(255,255,255)
+				];
+			attribute<uint32> SymbolColor := BrushColor, DialogType = "SymbolColor";
+		}
+
+		unit<uint32> daktype_uint32 := combine(windstreek, cl/stijlheid)
+		{
+			attribute<string> label := windstreek/label[nr_1] + '_' + cl/stijlheid/label[nr_2];
+			attribute<uint8>  key   := nr_1 * 10b + nr_2;
+		}
+
+		unit<uint8> daktype := range(uint8,0b,uint8(#daktype_uint32))
+		{
+			attribute<string> label := daktype_uint32/label[uint32(id(.))];
+			attribute<uint8>  key   := daktype_uint32/key[uint32(id(.))];
+		}
+
+		unit<uint8> gebruiksdoel_vbo: nrofrows = 11
+		{
+			attribute<string> label:
+			[
+				'bijeenkomstfunctie','celfunctie','gezondheidszorgfunctie','industriefunctie','kantoorfunctie','logiesfunctie'
+				,'onderwijsfunctie','overige gebruiksfunctie','sportfunctie','winkelfunctie','woonfunctie'
+			];
+			attribute<string> name := replace(replace(label,' ','_'), 'functie','');
+		}
+
+		unit<uint8> pandtype_geo: nrofrows = 6
+		{
+			attribute<string> label: ['geen woonpand','vrijstaand','twee onder 1 kap','hoekwoning','tussenwoning','meergezinspand'], DialogType = "labelText";
+			attribute<string> name := replace(label, ' ','_');
+
+			attribute<color> BrushColor: DialogType = "BrushColor",
+			[
+				 rgb(255,255,255)
+				,rgb( 26,152, 80)
+				,rgb(166,217,106)
+				,rgb(100,100,255)
+				,rgb(255,255,  0)
+				,rgb(255, 50, 50)
+			];
+			attribute<color> PenColor: DialogType = "PenColor",
+			[
+				 rgb(200,200,200)
+				,rgb( 26,152, 80)
+				,rgb(166,217,106)
+				,rgb(100,100,255)
+				,rgb(255,255,  0)
+				,rgb(255, 50, 50)
+			];
+			container V := for_each_nedv(lowercase(name), 'value('+string(id(.))+', ..)', void, .);
+		}
+
+		unit<uint8> pandtype_geo_plus: nrofrows = 8
+		{
+			attribute<string> label: ['geen woonpand','vrijstaand','twee onder 1 kap','hoekwoning','tussenwoning','meergezinspand','ligplaats','standplaats'], DialogType = "labelText";
+			attribute<string> name := replace(label, ' ','_');
+
+			attribute<color> BrushColor: DialogType = "BrushColor",
+			[
+				 rgb(255,255,255)
+				,rgb( 26,152, 80)
+				,rgb(166,217,106)
+				,rgb(100,100,255)
+				,rgb(255,255,  0)
+				,rgb(255, 50, 50)
+				,rgb(  0,  0,200)
+				,rgb(128,128,128)
+			];
+			attribute<color> PenColor: DialogType = "PenColor",
+			[
+				 rgb(200,200,200)
+				,rgb( 26,152, 80)
+				,rgb(166,217,106)
+				,rgb(100,100,255)
+				,rgb(255,255,  0)
+				,rgb(255, 50, 50)
+				,rgb(  0,  0, 77)
+				,rgb( 43, 43, 43)
+			];
+			container V := for_each_nedv(lowercase(name), 'value('+string(id(.))+', ..)', void, .);
+		}
+
+		unit<uint8> terreintype_brt: nrofrows = 20
+		{
+			parameter<uint32> nrAttr := 6;
+			unit<uint32> Elements    := range(uint32, 0, nrAttr*#.)
+			{
+				attribute<string> Text:
+				[
+					//   r,    g,.   b,code ,IsBos ,Values
+					 '198','233','172','10','True' ,'bos: naaldbos'
+					,'196','222','161','11','False','dodenakker'
+					,'171','238','104','12','False','dodenakker met bos'
+					,'241','255','241','13','False','fruitkwekerij'
+					,'242','248','220','14','False','grasland'
+					,'255','199','166','15','False','heide'
+					,'220','220','220','17','False','onbekend'
+					,'237','237','237','18','False','overig'
+					,'200','230','200','19','True' ,'populieren'
+					,'100',  '0', '50', '1','False','aanlegsteiger'
+					,'100','100','100','20','False','spoorbaanlichaam'
+					,'255','255','197','21','False','zand'
+					,'254','251','234', '2','False','akkerland'
+					,'224','224','224', '3','False','basaltblokken, steenglooiing'
+					,'237','237','237', '4','False','bebouwd gebied'
+					,'230','255','230', '5','True' ,'boomgaard'
+					,'230','255','230', '6','True' ,'boomkwekerij'
+					,'208','233','182', '7','True' ,'bos: gemengd bos'
+					,'228','233','202', '8','True' ,'bos: griend'
+					,'218','233','192', '9','True' ,'bos: loofbos'
+				];
+			}
+			attribute<uint32> nr         := uint32(id(.));
+			attribute<string> name       := label;
+			attribute<uint32> red        := uint32(Elements/Text[value(nr * nrAttr + 0, Elements)]);
+			attribute<uint32> green      := uint32(Elements/Text[value(nr * nrAttr + 1, Elements)]);
+			attribute<uint32> blue       := uint32(Elements/Text[value(nr * nrAttr + 2, Elements)]);
+			attribute<uint32> code       := uint32(Elements/Text[value(nr * nrAttr + 3, Elements)]);
+			attribute<bool>   IsBos      :=   bool(Elements/Text[value(nr * nrAttr + 4, Elements)]);
+			attribute<string> label      := Elements/Text[value(nr * nrAttr + 5, Elements)], DialogType = "LabelText";
+			attribute<uint32> BrushColor := rgb(red,green,blue), DialogType = "BrushColor";
+
+			attribute<int16>  PenStyle   := const(5s,.),    DialogType = "PenStyle";
+			attribute<uint32> PenColor   := BrushColor,          DialogType = "PenColor";
+
+			attribute<uint32> grey       := min_elem(uint32(float32(red + green + blue) / 3f) + 10, 255);
+		}
+	}
+}

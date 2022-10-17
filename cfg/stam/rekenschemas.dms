@@ -1,0 +1,136 @@
+////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                    //
+//                                                                                    //
+//        Configuratie voor het genereren van MapGallery data voor een project        //
+//                                                                                    //
+//                              Object Vision 2017                                    //
+//                                                                                    //
+////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                    //
+//                          Configuratiebestand met rekenschemas                      //
+//                                                                                    //
+////////////////////////////////////////////////////////////////////////////////////////
+
+container Rekenschemas: Using = "Eenheden;Klassificaties;Brondata;Geografie"
+{
+	#include<voorzieningtype_selectie.dms>
+	#include<VoorzieningNaarStudieGebiedPlus.dms>
+
+	#include<netwerk_punten_wegen.dms>
+	#include<afstandoverweg.dms>
+
+	#include<BevolkingsPrognose.dms>
+
+	#include<ToHTML.dms>
+	#include<ToCSV.dms>
+
+	#include<AHN.dms>
+
+	#include<Vervangingen.dms>
+
+	Template bounding_box
+	{
+		// begin case parameters
+		unit<uint32> domain;
+		attribute<Geografie/point_rd> geometry (polygon, domain);
+		// end case parameters
+
+		attribute<point_rd> lowerbound (domain) := lower_bound(geometry);
+		attribute<point_rd> upperbound (domain) := upper_bound(geometry);
+
+		container bbox
+		{
+			attribute<m> minX (domain) := PointCol(lowerbound)[m];
+			attribute<m> maxX (domain) := PointCol(upperbound)[m];
+
+			attribute<m> minY (domain) := PointRow(lowerbound)[m];
+			attribute<m> maxY (domain) := PointRow(upperbound)[m];
+		}
+
+		attribute<bool> inStudieGebiedPlus (domain) :=
+			   bbox/minX >= Geografie/StudiegebiedExtentPlus/x_min 
+			&& bbox/maxX <= Geografie/StudiegebiedExtentPlus/x_max 
+			&& bbox/minY >= Geografie/StudiegebiedExtentPlus/y_min 
+			&& bbox/maxY <= Geografie/StudiegebiedExtentPlus/y_max;
+	}
+
+	Template vbo_plus_sgp_rel_via_adres
+	{
+		//begin case parameters
+		unit<uint32> src;
+		parameter<bool> metBuren;
+		// end case parameters
+
+		attribute<string> toevoeging_num     (src) := MakeDefined(string(uint32(toevoeging)),''); // met name om voorloopnullen weg te halen
+		attribute<string> postcode_formatted (src) := strlen(trim(postcode)) > 5 ? replace(uppercase(trim(postcode)),' ','') : string( 0 / 0);
+		attribute<string> pc_hnr             (src) := postcode_formatted + '_' + string(huisnummer);
+		attribute<string> pc_hnr_hl          (src) := pc_hnr + '_' + ((strlen(huisletter) < 1 || isNull(huisletter)) ? 'geen'  : uppercase(trim(huisletter)));
+		attribute<string> pc_hnr_hl_toev     (src) := pc_hnr_hl + ((strlen(toevoeging) < 1 || isNull(toevoeging)) ? ''         : uppercase(trim(toevoeging)));
+		attribute<string> pc_hnr_hl_toev_num (src) := pc_hnr_hl + ((strlen(toevoeging_num) < 1 || isNull(toevoeging_num)) ? '' : uppercase(trim(toevoeging_num)));
+
+		attribute<string> pc_hnr_buur_plus   (src) := postcode_formatted + '_' + string(uint32(huisnummer) + 2);
+		attribute<string> pc_hnr_buur_min    (src) := postcode_formatted + '_' + string(uint32(huisnummer) - 2);
+
+		attribute<BronData/vastgoed/BAG/StudiegebiedPlus/vbo_plus> vbo_plus_sgp_rel_zonder_buren (src) :=
+			MakeDefined(
+				 rlookup(pc_hnr_hl_toev    , BronData/vastgoed/BAG/StudiegebiedPlus/vbo_plus/rel_via_adres/pc_hnr_hl_toev)
+				,rlookup(pc_hnr_hl_toev_num, BronData/vastgoed/BAG/StudiegebiedPlus/vbo_plus/rel_via_adres/pc_hnr_hl_toev_num)
+				,rlookup(pc_hnr_hl         , BronData/vastgoed/BAG/StudiegebiedPlus/vbo_plus/rel_via_adres/pc_hnr_hl)
+				,rlookup(pc_hnr            , BronData/vastgoed/BAG/StudiegebiedPlus/vbo_plus/rel_via_adres/pc_hnr)
+			);
+
+		attribute<BronData/vastgoed/BAG/StudiegebiedPlus/vbo_plus> vbo_plus_sgp_rel (src) := = metBuren 
+			? 'MakeDefined(
+					vbo_plus_sgp_rel_zonder_buren
+					,rlookup(pc_hnr_buur_plus, BronData/vastgoed/BAG/StudiegebiedPlus/vbo_plus/rel_via_adres/pc_hnr)
+					,rlookup(pc_hnr_buur_min , BronData/vastgoed/BAG/StudiegebiedPlus/vbo_plus/rel_via_adres/pc_hnr)
+				)'
+			: 'vbo_plus_sgp_rel_zonder_buren';
+	}
+
+	Template AddThousandSeperatorMax2
+	{
+		// begin case parameters
+		unit<uint32>      domain;
+		attribute<string> source (domain);
+		parameter<string> seperator := '.';
+		// end case parameters
+
+		container impl
+		{
+			attribute<uint32> length       (domain) := strlen(source);
+			attribute<uint32> nrSeperators (domain) := (length - 1) / 3;
+		}
+		attribute<string> result (domain) :=
+			switch(
+				  case(impl/nrSeperators == 1, substr(source, 0, impl/length - 3) + seperator + substr(source, impl/length - 3, 3))
+				, case(impl/nrSeperators == 2, substr(source, 0, impl/length - 6) + seperator + substr(source, impl/length - 6, 3)+ seperator + substr(source, impl/length - 3, impl/length - 1))
+				, source
+			);
+	}
+
+	Template bepaal_source_description
+	{
+		// begin case parameters
+		parameter<string> src_name;
+		unit<uint32>      domain;
+		attribute<string> brnid_all (domain);
+		attribute<bool >  in_sgp    (domain);
+		// end case parameters
+
+		container impl
+		{
+			unit<uint32> sgp := Subset(in_sgp)
+			{
+				attribute<string> brnid := brnid_all[nr_OrgEntity];
+			}
+			unit<uint32> unique := unique(sgp/brnid);
+			parameter<string> brnid_list := AsItemList(unique/values);
+
+			parameter<string> file  := expand(., src_name);
+			parameter<string> brnid := 'brnid: ' + brnid_list;
+		}
+
+		parameter<string> descr := impl/file + ', ' + impl/brnid;
+	}
+}

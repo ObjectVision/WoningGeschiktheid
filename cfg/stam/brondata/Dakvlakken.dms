@@ -1,0 +1,46 @@
+//                                                                                                  //
+//           Configuratie voor het bepalen van het ongeschikt vastgoed voor ouderen                 //
+//                                                                                                  //
+//                           Stichting InFact & Object Vision 2018                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                          Configuratiebestand met AHN brondata                                    //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+container Dakvlakken
+{
+	/*
+	unit<uint32> adres:
+		StorageName     = "%SourceDataDir%/EDM/NH/adres.csv"
+	,	StorageType     = "gdal.vect"
+	,	StorageReadOnly = "True"
+	{
+	}
+
+	unit<uint32> pand_plus_csv:
+		StorageName     = "%SourceDataDir%/EDM/NH/pand_plus.csv"
+	,	StorageType     = "gdal.vect"
+	,	StorageReadOnly = "True"
+	{
+	}
+
+	unit<uint32> pand_plus:
+		StorageName     = "%SourceDataDir%/EDM/NH/pand_plus.shp"
+	,	StorageType     = "gdal.vect"
+	,	StorageReadOnly = "True"
+	,	DialogType      = "Map"
+	,	DialogData      = "geometry"
+	{
+		attribute<point_rd> geometry (poly);
+	}
+	
+	unit<uint32> pand_plus_dakvlak:
+		StorageName     = "%SourceDataDir%/EDM/NH/pand_plus_dakvlak.csv"
+	,	StorageType     = "gdal.vect"
+	,	StorageReadOnly = "True"
+	{
+	}
+	*/
+}

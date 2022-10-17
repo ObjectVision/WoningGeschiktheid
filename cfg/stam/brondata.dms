@@ -1,0 +1,54 @@
+//                                                                                                  //
+//           Configuratie voor het bepalen van het ongeschikt vastgoed voor ouderen                 //
+//                                                                                                  //
+//                           Stichting InFact & Object Vision 2018                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                          Configuratiebestand met brondata                                        //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+container Brondata: Using = "Eenheden;Klassificaties;Geografie"
+{
+	#include<AHN.dms>
+	#include<BAG.dms>
+	unit<uint64> pc6_pc6_weg_300m_uint64 : StorageName = "%SourceDataDir%/WoonZorgWijzer/pc6_pc6_300.fss"
+	{
+		attribute<string> PC6_org;
+		attribute<string> PC6_dest;
+		attribute<m>      impedance;
+	}
+	unit<uint32> pc6_pc6_weg_300m := range(uint32,0,#pc6_pc6_weg_300m_uint64)
+	{
+		attribute<string>  PC6_org   := union_data(.,pc6_pc6_weg_300m_uint64/PC6_org);
+		attribute<string>  PC6_dest  := union_data(.,pc6_pc6_weg_300m_uint64/PC6_dest);
+		attribute<float32> impedance := union_data(.,pc6_pc6_weg_300m_uint64/impedance);
+	}
+	unit<uint32> provincie
+	:	StorageName = "%SourceDataDir%/CBS/provincie.shp"
+	,	DialogType   = "Map"
+	,	DialogData   = "geometry"
+	{
+		attribute<point_rd> geometry(poly);
+	}
+	unit<uint32> NH := Subset(id(provincie) == 7)
+	{
+		attribute<point_rd> geometry(poly) := provincie/geometry[nr_OrgEntity];
+	}
+	unit<uint32> postcode_NH_BAG := unique(BAG/adres_NH/postcode)
+	{
+		attribute<string> PC6 := values, FreeData = "False";
+	}
+
+	unit<uint32> pc6_pc6_weg_300m_NH := Subset(isDefined(rlookup(pc6_pc6_weg_300m/Pc6_org, postcode_NH_BAG/values)))
+	{
+		attribute<string> PC6_org := pc6_pc6_weg_300m/PC6_org[nr_OrgEntity];
+		attribute<string> PC6_dest:= pc6_pc6_weg_300m/Pc6_dest[nr_OrgEntity];
+	}
+
+	unit<uint32> postcode_NH      := unique(pc6_pc6_weg_300m_NH/PC6_org);
+	unit<uint32> postcode_NH_300m := unique(pc6_pc6_weg_300m_NH/PC6_dest);
+
+	//#include<Dakvlakken.dms>
+}

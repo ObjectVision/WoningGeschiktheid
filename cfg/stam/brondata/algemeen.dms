@@ -1,0 +1,27 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                                                                                                  //
+//        Configuratie voor het genereren van vastgoed informatie voor EDM                          //
+//                                                                                                  //
+//                              Object Vision 2017                                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//               Configuratiebestand met brondata > Algemeen (Provincie Indeling)                   //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+container Algemeen
+{
+	unit<uint32> provincie
+	:	StorageName     = "%SourceDataDir%/CBS/provincie.shp"
+	,	StorageType     = "gdal.vect"
+	,	StorageReadOnly = "True"
+	,	DialogData      = "geometry_rd"
+	,	DialogType      = "Map"
+	{
+		attribute<fpoint>   geometry    (poly);
+		attribute<point_rd> geometry_rd (poly) := geometry[point_rd]; // truc voor issue 855, weer wegwerken als is opgelost.
+		attribute<string>   name               := rjoin(PR_NAAM, co/provincie/Label, co/provincie/name), DisableStorage = "True";
+	}
+}

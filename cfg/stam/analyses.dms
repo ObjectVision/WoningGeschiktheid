@@ -1,0 +1,610 @@
+//                                                                                                  //
+//           Configuratie voor het bepalen van het ongeschikt vastgoed voor ouderen                 //
+//                                                                                                  //
+//                           Stichting InFact & Object Vision 2018                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                          Configuratiebestand met Geschiktheid Vastgoed Analyses                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
+{
+	container Geschiktheid
+	{
+		unit<uint32> woning := Subset(Brondata/BAG/vbo/gebruiksdoelen/woon)
+		,	DialogType = "Map"
+		,	DialogData = "geometry"
+		{
+			attribute<string>      identificatie       := Brondata/BAG/vbo/identificatie[nr_OrgEntity];
+			attribute<point_rd>    geometry            := Brondata/BAG/vbo/geometry[nr_OrgEntity];
+
+			attribute<int32>       oppervlakte         := Brondata/BAG/vbo/oppervlakte[nr_OrgEntity];
+			attribute<string>      nummeraanduiding_id := Brondata/BAG/vbo/nummeraanduiding_id[nr_OrgEntity];
+			attribute<string>      postcode            := Brondata/BAG/vbo/postcode[nr_OrgEntity];
+			attribute<postcode_NH> postcode_NH_rel     := rlookup(postcode, postcode_NH/postcode);
+			
+			attribute<string>      pand_id_geom        := Brondata/BAG/vbo/pand_id_geom[nr_OrgEntity];
+
+			attribute<float32>     kans_ongeschikt     := rjoin(pand_id_geom, pand_met_woning/identificatie_uq, pand_met_woning/woningen_ongeschikt_rel);
+			attribute<float32>     kans_aanpasbaar     := rjoin(pand_id_geom, pand_met_woning/identificatie_uq, pand_met_woning/woningen_aanpasbaar_rel);
+			attribute<float32>     kans_geschikt       := rjoin(pand_id_geom, pand_met_woning/identificatie_uq, pand_met_woning/woningen_geschikt_rel);
+			attribute<float32>     nr_woningen         := kans_ongeschikt + kans_aanpasbaar + kans_geschikt;
+
+			attribute<pc6>         pc6_rel             := rlookup(postcode, pc6/values);
+
+			unit<uint32> pc6 := unique(postcode)
+			{
+				attribute<float32>   kans_ongeschikt := sum(woning/kans_ongeschikt, woning/pc6_rel);
+				attribute<float32>   kans_aanpasbaar := sum(woning/kans_aanpasbaar, woning/pc6_rel);
+				attribute<float32>   kans_geschikt   := sum(woning/kans_geschikt  , woning/pc6_rel);
+				attribute<float32>   nr_woningen     := sum(woning/nr_woningen    , woning/pc6_rel);
+			}
+		}
+
+		unit<uint32> pc6_2_pc6 := Brondata/pc6_pc6_weg_300m_NH
+		{
+			attribute<woning/pc6>  woning_pc6_rel  := rlookup(Brondata/pc6_pc6_weg_300m_NH/pc6_dest, woning/pc6/values);
+			
+			attribute<float32>     kans_ongeschikt := MakeDefined(woning/pc6/kans_ongeschikt[woning_pc6_rel], 0f);
+			attribute<float32>     kans_aanpasbaar := MakeDefined(woning/pc6/kans_aanpasbaar[woning_pc6_rel], 0f);
+			attribute<float32>     kans_geschikt   := MakeDefined(woning/pc6/kans_geschikt[woning_pc6_rel], 0f);
+			attribute<float32>     nr_woningen     := MakeDefined(woning/pc6/nr_woningen[woning_pc6_rel], 0f);
+
+			attribute<Brondata/postcode_NH> postcode_NH_rel: = rlookup(pc6_org, Brondata/postcode_NH/Values);
+		}
+
+		unit<uint32> postcode_NH := Brondata/postcode_NH
+		,	StorageName = "%SourceDataDir%/WoonZorgWijzer/OngeschiktVastgoedPC6m300.fss"
+		{
+			attribute<string>      postcode            := Brondata/postcode_NH/Values;
+
+			attribute<float32>     sum_kans_ongeschikt := sum(pc6_2_pc6/kans_ongeschikt, pc6_2_pc6/postcode_NH_rel);
+			attribute<float32>     sum_kans_aanpasbaar := sum(pc6_2_pc6/kans_aanpasbaar, pc6_2_pc6/postcode_NH_rel);
+			attribute<float32>     sum_kans_geschikt   := sum(pc6_2_pc6/kans_geschikt  , pc6_2_pc6/postcode_NH_rel);
+			attribute<float32>     sum_nr_woningen     := sum(pc6_2_pc6/nr_woningen    , pc6_2_pc6/postcode_NH_rel);
+
+			attribute<float32>     percentage_ongeschikt := MakeDefined(100f * (sum_kans_ongeschikt / sum_nr_woningen) ,0f);
+			attribute<float32>     percentage_aanpasbaar := MakeDefined(100f * (sum_kans_aanpasbaar / sum_nr_woningen) ,0f);
+			attribute<float32>     percentage_geschikt   := MakeDefined(100f * (sum_kans_geschikt   / sum_nr_woningen) ,0f);
+			
+			attribute<float32>     nr_woningen_in_pc6    := sum(woning/nr_woningen , woning/postcode_NH_rel);
+		}
+
+		unit<uint32> read_postcode_NH 
+		:	StorageName     = "%SourceDataDir%/WoonZorgWijzer/OngeschiktVastgoedPC6m300.fss"
+		,	StorageReadOnly = "True"
+		{
+			attribute<string>      postcode;
+			
+			attribute<float32>     sum_kans_ongeschikt;
+			attribute<float32>     sum_kans_aanpasbaar;
+			attribute<float32>     sum_kans_geschikt;
+			attribute<float32>     sum_nr_woningen;
+
+			attribute<float32>     percentage_ongeschikt;
+			attribute<float32>     percentage_aanpasbaar;
+			attribute<float32>     percentage_geschikt;
+		}
+
+		container pand_met_woning_export
+		{
+			unit<uint32> context:= pand_met_woning;
+			
+			parameter<string> Fieldlist      :=
+				  'identificatie;adres_range;nr_woningen;bouwjaar;hoogte_AHN_cm;nr_bouwlagen_ahn;area_m2_afgerond;sum_vbo_oppervlaktes;nr_bouwlagen_vbo_opp_pand;nr_bouwlagen;'
+				+ 'waarschijnlijk_lift_WooN;lift_risico_zone;waarschijnlijk_lift_AHN;waarschijnlijk_lift_vbo_gebruiksdoel;waarschijnlijk_lift;'
+				+ 'beukmaat_bepaald;has_beukmaat_510_kleiner;'
+				+ 'woningen_ongeschikt_totaal;woningen_aanpasbaar_totaal;woningen_geschikt_totaal;'
+				+ 'woningen_ongeschikt_MeerGezinsZonderLiftNietOpBeganeGrond;woningen_ongeschikt_BeukmaatTeKlein;woningen_ongeschikt_KlassiekeWinkelstraat;'
+				+ 'woningen_geschikt_MeerGezinsZonderLiftOpBeganeGrond;woningen_geschikt_Bungalow;woningen_geschikt_MeergezinsMetLift';
+			parameter<string> FieldSeperator := ';';
+			parameter<string> FileName       := '%LocalDataProjDir%/pand_met_woning.csv';
+		
+			unit<uint32> field := range(uint32,0,strcount(Fieldlist,';')+1)
+			{
+				attribute<string> Name := ReadArray(FieldList,.,string,0);
+			}
+
+			parameter<string> Header  := FieldList;
+			attribute<string> Body (context) :=
+				=AsList(
+					+'String(context/'+Field/Name+')',' + '+Quote(FieldSeperator)+' +'
+				);
+
+			parameter<string> Result:= Header + system/NewLine + AsList(Body, system/NewLine)
+			,	StorageName = "=FileName"
+			,	StorageType = "str";
+		}
+
+		unit<uint32> pand_met_woning := Subset(BAG/pand/heeft_woningen)
+		,	DialogData = "geometry"
+		,	DialogType = "Map"
+		,	FreeData   = "false"
+		{
+			attribute<string>        identificatie_uq                     := BAG/pand/identificatie[nr_OrgEntity];
+
+			attribute<string>        identificatie                        := quote(identificatie_uq);
+			attribute<point_rd>      geometry (poly)                      := BAG/pand/geometry[nr_OrgEntity];
+			attribute<string>        adres_range                          := BAG/pand/adres_range[nr_OrgEntity];
+			attribute<string>        postcode                             := BAG/pand/postcode[nr_OrgEntity];
+
+			attribute<uint32>        nr_woningen                          := BAG/pand/nr_woningen[nr_OrgEntity];
+			attribute<bool>          is_meergezins                        := BAG/pand/is_meergezins[nr_OrgEntity];
+
+			attribute<eenheden/jaar> bouwjaar                             := BAG/pand/bouwjaar[nr_OrgEntity];
+			attribute<cm_uint16>     hoogte_AHN                           := AHNafleidingen/pand/hoogte[nr_OrgEntity];
+			attribute<cm_uint16>     hoogte_AHN_cm                        := hoogte_AHN;
+			
+			attribute<verdieping>    nr_bouwlagen_ahn                     := round(impl/bouwlagen_ahn_quotient)[verdieping];
+
+			attribute<m2>            area                                 := area(geometry, m2);
+			attribute<int32>         area_m2_afgerond                     := round(area);
+
+			attribute<m2>            sum_vbo_oppervlaktes                 := BAG/pand/sum_vbo_oppervlaktes[nr_OrgEntity];
+			attribute<verdieping>    nr_bouwlagen_vbo_opp_pand            := roundup(sum_vbo_oppervlaktes / area)[verdieping];
+
+			// LET OP NOG AANPASSEN VOOR HEEL NL, exactere inwinjaren AHN2/3 op basis van shape file Jip
+			attribute<verdieping>    nr_bouwlagen                         := 
+				max_elem( 1[verdieping]
+						 , (bouwjaar < 1945[jaar] || bouwjaar >= AHNafleidingen/pand/inwinjaar[nr_OrgEntity] || isNull(nr_bouwlagen_ahn) || nr_bouwlagen_ahn  == 0[verdieping]) 
+						 	? nr_bouwlagen_vbo_opp_pand
+						 	: nr_bouwlagen_ahn);
+
+			attribute<co/boolWoon>   waarschijnlijk_lift_WooN             := is_meergezins && impl/waarschijnlijk_lift_WooN;
+			attribute<co/boolWoon>   lift_risico_zone                     := impl/lift_risico_zone;
+			attribute<co/boolAHN>    waarschijnlijk_lift_AHN              := impl/ratio_vlak >0.22[ratio] && Analyses/AHNafleidingen/pand/heeftMogelijkLiftschacht[nr_OrgEntity];
+			attribute<co/boolWoon>   waarschijnlijk_lift_vbo_gebruiksdoel :=
+				   (nr_woningen >  1 && impl/heeft_zorg) 
+				|| (nr_woningen > 10 && impl/nr_winkels > 5 && impl/heeft_bijeenkomst)
+				|| (nr_woningen > 35 && impl/heeft_overige_functie);
+			attribute<co/boolAHN>    waarschijnlijk_lift                  :=
+				waarschijnlijk_lift_vbo_gebruiksdoel
+					? true
+					: bouwjaar >= 1000[jaar] && bouwjaar < 1945[jaar]
+						? waarschijnlijk_lift_WooN
+						: lift_risico_zone
+							? waarschijnlijk_lift_AHN
+							: waarschijnlijk_lift_WooN;
+
+			attribute<Bool>          beukmaat_bepaald                                           := impl/moet_BeukMaat_bepalen;
+			attribute<Bool>          has_beukmaat_510_kleiner                                   := rjoin(identificatie, pand_beukmaat_bepaling/identificatie, pand_beukmaat_bepaling/has_beukmaat_510_kleiner), FreeData = "False";
+
+			attribute<uint32>        woningen_ongeschikt_totaal                                 := ongeschikt/totaal;
+			attribute<uint32>        woningen_aanpasbaar_totaal                                 := aanpasbaar/totaal;
+			attribute<uint32>        woningen_geschikt_totaal                                   := geschikt/totaal;
+
+			attribute<uint32>        woningen_totaal                                            := woningen_ongeschikt_totaal + woningen_aanpasbaar_totaal + woningen_geschikt_totaal;
+
+			attribute<float32>       woningen_ongeschikt_rel                                    := float32(woningen_ongeschikt_totaal) / float32(woningen_totaal);
+			attribute<float32>       woningen_aanpasbaar_rel                                    := float32(woningen_aanpasbaar_totaal) / float32(woningen_totaal);
+			attribute<float32>       woningen_geschikt_rel                                      := float32(woningen_geschikt_totaal)   / float32(woningen_totaal);
+
+			attribute<uint32>        woningen_ongeschikt_MeerGezinsZonderLiftNietOpBeganeGrond  := ongeschikt/MeerGezinsZonderLiftNietOpBeganeGrond;
+			attribute<uint32>        woningen_ongeschikt_BeukmaatTeKlein                        := ongeschikt/BeukmaatTeKlein;
+			attribute<uint32>        woningen_ongeschikt_KlassiekeWinkelstraat                  := ongeschikt/KlassiekeWinkelstraat;
+
+			attribute<uint32>        woningen_geschikt_MeerGezinsZonderLiftOpBeganeGrond        := geschikt/MeerGezinsZonderLiftOpBeganeGrond;
+			attribute<uint32>        woningen_geschikt_Bungalow                                 := geschikt/Bungalow;
+			attribute<uint32>        woningen_geschikt_MeergezinsMetLift                        := geschikt/MeergezinsMetLift;
+
+			attribute<bool>          geschiktheid_niet_bepaald                                  := ongeschikt/totaal + aanpasbaar/totaal + geschikt/totaal <> nr_woningen;
+
+			container ongeschikt
+			{
+				attribute<uint32> MeerGezinsZonderLiftNietOpBeganeGrond (pand_met_woning) := impl/MeerGezinsZonderLiftConditie
+					?	nr_woningen - (impl/HeeftWaarschijnlijkWoningenBeganeGrond ? impl/nr_woningen_per_bouwlaag : 0)
+					:	0;
+
+				attribute<uint32> BeukmaatTeKlein                       (pand_met_woning) := impl/moet_BeukMaat_bepalen && has_beukmaat_510_kleiner
+					?	nr_woningen
+					:	0;
+
+				attribute<uint32> KlassiekeWinkelstraat                 (pand_met_woning) := nr_bouwlagen == 2b && impl/heeft_winkel && !BeukmaatTeKlein
+					?	nr_woningen
+					:	0;
+
+				attribute<uint32> totaal                                (pand_met_woning) := MeerGezinsZonderLiftNietOpBeganeGrond + BeukmaatTeKlein + KlassiekeWinkelstraat;
+			}
+
+			container aanpasbaar
+			{
+				attribute<uint32> totaal (pand_met_woning) := 
+					!is_meergezins && (sum_vbo_oppervlaktes >= 85[m2] || !has_beukmaat_510_kleiner) && !geschikt/Bungalow && !ongeschikt/KlassiekeWinkelstraat
+					?	nr_woningen
+					:	0;
+			}
+
+			container geschikt
+			{
+				attribute<uint32> MeerGezinsZonderLiftOpBeganeGrond (pand_met_woning) := (impl/MeerGezinsZonderLiftConditie && impl/HeeftWaarschijnlijkWoningenBeganeGrond)
+					?	impl/nr_woningen_per_bouwlaag
+					:	0;
+
+				attribute<uint32> Bungalow                          (pand_met_woning) := nr_bouwlagen_vbo_opp_pand <= 1b && nr_bouwlagen_ahn <= 1b
+					?	nr_woningen
+					:	0;
+
+				attribute<uint32> MeergezinsMetLift                 (pand_met_woning) := is_meergezins && waarschijnlijk_lift &&!Bungalow && !ongeschikt/KlassiekeWinkelstraat
+					?	nr_woningen
+					:	0;
+
+				attribute<uint32> totaal                            (pand_met_woning) := MeerGezinsZonderLiftOpBeganeGrond + Bungalow + MeergezinsMetLift;
+			}
+
+			container impl
+			{
+				attribute<m2>                   sum_vbo_woon_oppervlaktes              (pand_met_woning) := BAG/pand/sum_vbo_woon_oppervlaktes[nr_OrgEntity];
+				attribute<verdieping>           nr_bouwlagen_vbo_woon_opp_pand         (pand_met_woning) := roundup(sum_vbo_woon_oppervlaktes / area)[verdieping];
+				attribute<bool>                 HeeftWaarschijnlijkWoningenBeganeGrond (pand_met_woning) := 
+					  (bouwjaar >= 1000[jaar] && bouwjaar < 1945[jaar] && pand_met_woning/nr_woningen == impl/nr_vbo)
+					|| nr_bouwlagen_vbo_woon_opp_pand == nr_bouwlagen;
+
+				attribute<bool>                 MeerGezinsZonderLiftConditie           (pand_met_woning) := is_meergezins && !waarschijnlijk_lift && !geschikt/Bungalow && !ongeschikt/KlassiekeWinkelstraat;
+
+				attribute<co/pandtype_geo>      pandtype_geo_rel                       (pand_met_woning) := BAG/pand/woonpand_type[nr_OrgEntity];
+				attribute<uint32>               nr_vbo                                 (pand_met_woning) := BAG/pand/nr_vbo[nr_OrgEntity];
+				attribute<co/boolWoon>          heeft_zorg                             (pand_met_woning) := BAG/pand/heeft_zorg[nr_OrgEntity];
+				attribute<co/boolWoon>          heeft_winkel                           (pand_met_woning) := BAG/pand/heeft_winkel[nr_OrgEntity];
+				attribute<co/boolWoon>          heeft_overige_functie                  (pand_met_woning) := BAG/pand/heeft_overige_functie[nr_OrgEntity];
+				
+				attribute<uint32>               nr_winkels                             (pand_met_woning) := BAG/pand/nr_winkels[nr_OrgEntity];
+				attribute<co/boolWoon>          heeft_bijeenkomst                      (pand_met_woning) := BAG/pand/heeft_bijeenkomst[nr_OrgEntity];
+
+				attribute<cl/verdiepingshoogte> verdiepingshoogte_rel                  (pand_met_woning) := classify(bouwjaar, cl/verdiepingshoogte/bouwjaar);
+				
+				attribute<cm_uint16>            bouwlagen_ahn_noemer                   (pand_met_woning) := cl/verdiepingshoogte/plafondhoogte[verdiepingshoogte_rel] + cl/verdiepingshoogte/vloerhoogte;
+				attribute<float32>              bouwlagen_ahn_quotient                 (pand_met_woning) := float32(hoogte_AHN) / float32(bouwlagen_ahn_noemer);
+
+				attribute<uint32>               nr_woningen_per_bouwlaag               (pand_met_woning) := uint32(round(float32(nr_woningen) / float32(nr_bouwlagen)));
+	
+				attribute<ratio>                ratio_vlak                             (pand_met_woning) := AHNafleidingen/pand/perc_vlak[nr_OrgEntity];
+	
+				attribute<bool>                 waarschijnlijk_lift_WooN     (pand_met_woning) := switch(
+						case(bouwjaar >= 1000[jaar] && bouwjaar < 1945[jaar] && nr_bouwlagen > 6[verdieping],true)
+					,	case(bouwjaar >= 1945[jaar] && bouwjaar < 1960[jaar] && nr_bouwlagen > 5[verdieping],true)
+					,	case(bouwjaar >= 1960[jaar] && bouwjaar < 1969[jaar] && nr_bouwlagen > 4[verdieping],true)
+					,	case(bouwjaar >= 1970[jaar] && bouwjaar < 1979[jaar] && nr_bouwlagen > 3[verdieping],true)
+					,	case(bouwjaar >= 1980[jaar] && bouwjaar < 1989[jaar] && nr_bouwlagen > 3[verdieping],true)
+					,	case(bouwjaar >= 1990[jaar] && nr_bouwlagen > 1[verdieping],true)
+					, false
+					);
+				/*
+				attribute<bool>                 lift_risico_zone_oud_gele_cellen             (pand_met_woning) := switch(
+						case(bouwjaar >= 1000[jaar] && bouwjaar < 1945[jaar] && nr_bouwlagen  > 4[verdieping] && nr_bouwlagen < 7[verdieping],true)
+					,	case(bouwjaar >= 1945[jaar] && bouwjaar < 1960[jaar] && nr_bouwlagen == 5[verdieping],true)
+					,	case(bouwjaar >= 1960[jaar] && bouwjaar < 1970[jaar] && nr_bouwlagen  > 3[verdieping] && nr_bouwlagen < 6[verdieping],true)
+					,	case(bouwjaar >= 1970[jaar] && bouwjaar < 1980[jaar] && nr_bouwlagen  > 2[verdieping] && nr_bouwlagen < 5[verdieping],true)
+					,	case(bouwjaar >= 1980[jaar] && bouwjaar < 1990[jaar] && nr_bouwlagen  > 2[verdieping] && nr_bouwlagen < 6[verdieping],true)
+					,	case(bouwjaar >= 1990[jaar] && bouwjaar < 2000[jaar] && nr_bouwlagen  > 1[verdieping] && nr_bouwlagen < 4[verdieping],true)
+					,	case(bouwjaar >= 2000[jaar] && nr_bouwlagen == 2[verdieping],true)
+					, false
+					);
+				*/
+				attribute<bool>                 lift_risico_zone             (pand_met_woning) := switch(
+						case(bouwjaar >= 1945[jaar] && bouwjaar < 1960[jaar] && nr_bouwlagen  > 3[verdieping] && nr_bouwlagen < 6[verdieping],true)
+					,	case(bouwjaar >= 1960[jaar] && bouwjaar < 1970[jaar] && nr_bouwlagen  > 1[verdieping] && nr_bouwlagen < 6[verdieping],true)
+					,	case(bouwjaar >= 1970[jaar] && bouwjaar < 1980[jaar] && nr_bouwlagen  > 1[verdieping] && nr_bouwlagen < 5[verdieping],true)
+					,	case(bouwjaar >= 1980[jaar] && bouwjaar < 1990[jaar] && nr_bouwlagen  > 1[verdieping] && nr_bouwlagen < 7[verdieping],true)
+					,	case(bouwjaar >= 1990[jaar] && bouwjaar < 2000[jaar] && nr_bouwlagen  > 1[verdieping] && nr_bouwlagen < 5[verdieping],true)
+					,	case(bouwjaar >= 2000[jaar]                          && nr_bouwlagen  > 1[verdieping] && nr_bouwlagen < 4[verdieping],true)
+					, false
+					);
+
+				attribute<bool>                 moet_BeukMaat_bepalen        (pand_met_woning) :=
+//					    sum_vbo_oppervlaktes < 85[m2]
+					    area < 85[m2]
+					&& !is_meergezins
+					&& (nr_bouwlagen == 2[verdieping] || nr_bouwlagen == 3[verdieping]);
+
+				// Voor relatie naar AHN bladen
+				attribute<point_rd>                   centroid               (pand_met_woning) := point(bbox/x_min + 0.5f * bbox/dx, bbox/y_min + 0.5f * bbox/dy, point_rd); // de centroid_or_mid geeft incorrecte resultaten voor sommige geometrieen.
+				attribute<Geografie/blad_grid/domain> blad_grid_rel          (pand_met_woning) := centroid[Geografie/blad_grid/domain];
+				attribute<blad>                       blad_rel               (pand_met_woning) := rlookup(blad_grid_rel, blad/values);
+
+				container bbox
+				{
+					attribute<point_rd> lb (pand_met_woning) := lower_bound(geometry);
+					attribute<point_rd> ub (pand_met_woning) := upper_bound(geometry);
+					attribute<m> dx        (pand_met_woning) := pointCol(ub)[m] - pointCol(lb)[m];
+					attribute<m> dy        (pand_met_woning) := pointRow(ub)[m] - pointRow(lb)[m];
+
+					attribute<m> x_min     (pand_met_woning) := PointCol(lb)[m];
+					attribute<m> x_max     (pand_met_woning) := PointCol(ub)[m];
+					attribute<m> y_min     (pand_met_woning) := PointRow(lb)[m];
+					attribute<m> y_max     (pand_met_woning) := PointRow(ub)[m];
+				}
+
+				unit<uint32> blad := unique(blad_grid_rel)
+				{
+					attribute<string>   unit                 := Geografie/blad_grid/unit[values];
+					attribute<string>   name                 := Geografie/blad_grid/name[values];
+					//attribute<uint32>   nr_pand              := pcount(blad_rel);
+					attribute<AHN/blad> blad_rel             := rlookup(unit, AHN/blad/unit);
+
+					parameter<m>        buffer               := 2[m];
+					attribute<m>        x_min                := min(bbox/x_min, impl/blad_rel) - buffer;
+					attribute<m>        x_max                := max(bbox/x_max, impl/blad_rel) + buffer;
+					attribute<m>        y_min                := min(bbox/y_min, impl/blad_rel) - buffer;
+					attribute<m>        y_max                := max(bbox/y_max, impl/blad_rel) + buffer;
+
+					attribute<point_rd> geometry      (poly) := points2Sequence(pointset/point, value(pointset/sequence, blad), pointset/ordinal);
+					attribute<ipoint>   geometry_ipol (poly) := ipolygon(geometry);
+
+					unit<uint32> pointset := union_unit(., ., ., ., .)
+					{
+						attribute<point_rd> point := union_data(.
+							, point(x_min, y_max, point_rd)
+							, point(x_max, y_max, point_rd)
+							, point(x_max, y_min, point_rd)
+							, point(x_min, y_min, point_rd)
+							, point(x_min, y_max, point_rd)
+						);
+						attribute<uint32> sequence := id(.) % #blad;
+						attribute<blad>   ordinal  := id(.) / #blad;
+					}
+				}
+			}
+		}
+
+		unit<uint32> pand_beukmaat_bepaling := Subset(pand_met_woning/impl/moet_BeukMaat_bepalen)
+		{
+			attribute<string>   identificatie   := pand_met_woning/identificatie[nr_OrgEntity];
+			attribute<point_rd> geometry (poly) := pand_met_woning/geometry[nr_OrgEntity];
+			attribute<m2>       area            := pand_met_woning/area[nr_OrgEntity];
+			
+			attribute<bool>     has_beukmaat_510_kleiner := = 'union_data(.,' + AsItemList('segments/' + segment/name + '/pand_sel/has_beukmaat_510_kleiner') + ')';
+
+			unit<uint32> segment: nrofrows = 100
+			{
+				attribute<string> name      := 'segment' +string(id(.));
+				attribute<uint32> start_rel :=   id(.)       * #(pand_beukmaat_bepaling) / 100;
+				attribute<uint32> end_rel   := ((id(.) + 1) * #(pand_beukmaat_bepaling) / 100) - 1;
+			}
+
+			container segments := for_each_ne(
+				  segment/name
+				, 'beukmaat(' + string(segment/start_rel) + ', ' + string(segment/end_rel) +')'
+			);
+
+			template beukmaat
+			{
+				// begin case parameters
+				parameter<pand_beukmaat_bepaling> start_rel;
+				parameter<pand_beukmaat_bepaling> end_rel;
+				// end case parameters
+				
+				unit<uint32> pand_sel := subset(id(pand_beukmaat_bepaling) >= start_rel && id(pand_beukmaat_bepaling) <= end_rel)
+				{
+					attribute<string>   identificatie                := pand_beukmaat_bepaling/identificatie[nr_OrgEntity];
+					attribute<point_rd> geometry (poly)              := pand_beukmaat_bepaling/geometry[nr_OrgEntity];
+					attribute<m2>       area                         := pand_beukmaat_bepaling/area[nr_OrgEntity];
+
+					attribute<point_rd> polygon_d16D_510      (poly) := polygon_d16D(geometry[point_rd_mm],2550d)[point_rd];
+					attribute<m2>       area_polygon_d16D_510        := area(polygon_d16D_510, m2);
+					attribute<bool>     has_beukmaat_510_kleiner     := area_polygon_d16D_510 == 0[m2];
+				}
+			}
+		}
+	}
+	/*
+	container test_beukmaat
+	{
+		parameter<coord_rd> left   := 100000[coord_rd];
+		parameter<coord_rd> bottom :=  50000[coord_rd];
+		parameter<coord_rd> length :=      8[coord_rd];
+
+		container BM_51 := MakePolygon(5.1[coord_rd]);
+
+		unit<uint32> BM_51_rotated : StorageName = "C:/tmp/BM51_rotate.shp"
+		,	StorageType = "gdal.vect"
+		,	StorageReadOnly = "True"
+		{
+			attribute<point_rd> geometry       (poly);
+			attribute<m2>       area    := area(geometry, m2);
+			
+			attribute<point_rd> polygon_d16D_508      (poly) := polygon_d16D(geometry[point_rd_mm],2540d)[point_rd];
+			attribute<m2>       area_polygon_d16D_508        := area(polygon_d16D_508, m2);
+			
+			attribute<point_rd> polygon_d16D_510      (poly) := polygon_d16D(geometry[point_rd_mm],2550d)[point_rd];
+			attribute<m2>       area_polygon_d16D_510        := area(polygon_d16D_510, m2);
+			
+			attribute<point_rd> polygon_d16D_512      (poly) := polygon_d16D(geometry[point_rd_mm],2560d)[point_rd];
+			attribute<m2>       area_polygon_d16D_512        := area(polygon_d16D_512, m2);
+		}
+
+		template MakePolygon
+		{
+			// begin case parameter
+			parameter<coord_rd> width;
+			// end case parameter
+
+			parameter<point_rd> leftBottom  := point(left          , bottom, point_rd);
+			parameter<point_rd> leftTop     := point(left          , bottom + width, point_rd);
+			parameter<point_rd> rightTop    := point(left + length , bottom + width, point_rd);
+			parameter<point_rd> rightBottom := point(left + length , bottom, point_rd);
+ 
+ 			parameter<point_rd> MiddleTopComplex    := point(left + length          , bottom + width + length, point_rd);
+ 			parameter<point_rd> RightTopComplex     := point(left + length + length , bottom + width + length, point_rd);
+ 			parameter<point_rd> RightBottomComplex  := point(left + length + length , bottom - width, point_rd);
+			parameter<point_rd> MiddleBottomComplex := point(left + length          , bottom - width, point_rd);
+
+
+			unit<uint32> pointset_simple : nrofrows = 5
+			{
+				attribute<point_rd> point      := union_data(., leftTop, rightTop, rightBottom, leftBottom, leftTop);
+				attribute<poly>     sequencenr := const(0[poly],.);
+				attribute<uint32>   ordinal    := id(.);
+			}
+			unit<uint32> pointset_complex : nrofrows = 9
+			{
+				attribute<point_rd> point      := union_data(., leftTop, rightTop, MiddleTopComplex, RightTopComplex, RightBottomComplex, MiddleBottomComplex,rightBottom, leftBottom, leftTop);
+				attribute<poly>     sequencenr := const(0[poly],.);
+				attribute<uint32>   ordinal    := id(.);
+			}
+			unit<uint32> poly: nrofrows = 1
+			{
+				attribute<point_rd> geometry_simple  (poly) := points2sequence(pointset_simple/point , pointset_simple/sequencenr , pointset_simple/ordinal);
+				attribute<point_rd> geometry_complex (poly) := points2sequence(pointset_complex/point, pointset_complex/sequencenr, pointset_complex/ordinal);
+
+				attribute<m2>       area_simple             := area(geometry_simple, m2);
+				attribute<m2>       area_complex            := area(geometry_complex, m2);
+				
+				attribute<point_rd> simple_polygon_d16D_508      (poly) := polygon_d16D(geometry_simple[point_rd_mm],2540d)[point_rd];
+				attribute<m2>       simple_area_polygon_d16D_508        := area(simple_polygon_d16D_508, m2);
+				
+				attribute<point_rd> simple_polygon_d16D_510      (poly) := polygon_d16D(geometry_simple[point_rd_mm],2550d)[point_rd];
+				attribute<m2>       simple_area_polygon_d16D_510        := area(simple_polygon_d16D_510, m2);
+
+				attribute<point_rd> simple_polygon_d16D_512      (poly) := polygon_d16D(geometry_simple[point_rd_mm],2560d)[point_rd];
+				attribute<m2>       simple_area_polygon_d16D_512        := area(simple_polygon_d16D_512, m2);
+
+				attribute<point_rd> complex_polygon_d16D_508      (poly) := polygon_d16D(geometry_complex[point_rd_mm],2540d)[point_rd];
+				attribute<m2>       complex_area_polygon_d16D_508        := area(complex_polygon_d16D_508, m2);
+				
+				attribute<point_rd> complex_polygon_d16D_510      (poly) := polygon_d16D(geometry_complex[point_rd_mm],2550d)[point_rd];
+				attribute<m2>       complex_area_polygon_d16D_510        := area(complex_polygon_d16D_510, m2);
+				
+				attribute<point_rd> complex_polygon_d16D_512      (poly) := polygon_d16D(geometry_complex[point_rd_mm],2560d)[point_rd];
+				attribute<m2>       complex_area_polygon_d16D_512        := area(complex_polygon_d16D_512, m2);
+				
+			}
+		}
+	}
+	*/
+	container AHNafleidingen
+	{
+		container Genereer_AHN2_data_per_BAG_blad := schemas/verwerk_AHNSet('AHN2', Brondata/AHN/readDomainsAHN2);
+		container Genereer_AHN3_data_per_BAG_blad := schemas/verwerk_AHNSet('AHN3', Brondata/AHN/readDomainsAHN3);
+		
+		container merge_AHN2_data_per_BAG_blad := schemas/ahn_merge('AHN2', Brondata/AHN/readDomainsAHN2/bag_blad);
+		container merge_AHN3_data_per_BAG_blad := schemas/ahn_merge('AHN3', Brondata/AHN/readDomainsAHN3/bag_blad);
+		
+
+		unit<uint32> AHN2_inwinjaren : StorageName = "%SourceDataDir%/AHN/AHN_2/inwinjaren_AHN2_def.shp", StorageType = "gdal.vect", StorageReadOnly = "True";
+		unit<uint32> AHN3_inwinjaren : StorageName = "%SourceDataDir%/AHN/AHN_3/inwinjaren_AHN3_def.shp", StorageType = "gdal.vect", StorageReadOnly = "True";
+
+		unit<uint32> AHN2 : StorageName = "%LocalDataProjDir%/AHN2/pand_met_woning.fss", StorageReadOnly = "True"
+		{
+			attribute<string>    identificatie;
+			attribute<string>    identificatie_uq := unquote(identificatie), DisableStorage = "True";
+			attribute<cm_uint16> hoogte;
+			attribute<cm_uint16> hoogte_nok;
+			attribute<cm_uint16> hoogte_maaiveld_offset;
+			attribute<uint8>     bouwlagen_ahn;
+			attribute<float32>   perc_vlak;
+			attribute<bool>      heeftMogelijkLiftschacht;
+		}
+
+		unit<uint32> AHN3 : StorageName = "%LocalDataProjDir%/AHN3/pand_met_woning.fss", StorageReadOnly = "True"
+		,	DialogType = "Map"
+		,	DialogData = "geometry"
+		{
+			attribute<string>    identificatie;
+			attribute<string>    identificatie_uq := unquote(identificatie), DisableStorage = "True";
+			attribute<cm_uint16> hoogte;
+			attribute<cm_uint16> hoogte_nok;
+			attribute<cm_uint16> hoogte_maaiveld_offset;
+			attribute<uint8>     bouwlagen_ahn;
+			attribute<float32>   perc_vlak;
+			attribute<bool>      heeftMogelijkLiftschacht;
+			
+			attribute<point_rd> geometry (poly):= rjoin(identificatie_uq,BAG/pand/identificatie, BAG/pand/geometry);
+		}
+		
+		unit<uint32> pand := BAG/pand
+		{
+			attribute<bool> heeft_AHN3_data := isDefined(rjoin(BAG/pand/identificatie, AHN3/identificatie_uq, AHN3/hoogte));
+
+			attribute<jaar> inwinjaar := heeft_AHN3_data
+					? value(AHN3_inwinjaren/jaar[point_in_polygon(centroid_or_mid(BAG/pand/Geometry), AHN3_inwinjaren/Geometry[point_rd])], jaar)
+					: value(AHN2_inwinjaren/inwinjaar[point_in_polygon(centroid_or_mid(BAG/pand/Geometry), AHN2_inwinjaren/Geometry[point_rd])], jaar);
+
+			attribute<verdieping> nr_bouwlagen_AHN := heeft_AHN3_data
+					? rjoin(BAG/pand/identificatie, AHN3/identificatie_uq, AHN3/bouwlagen_ahn)
+					: rjoin(BAG/pand/identificatie, AHN2/identificatie_uq, AHN2/bouwlagen_ahn)
+				[verdieping];
+
+			attribute<bool> heeftMogelijkLiftschacht := heeft_AHN3_data
+				? rjoin(BAG/pand/identificatie, AHN3/identificatie_uq, AHN3/heeftMogelijkLiftschacht)
+				: rjoin(BAG/pand/identificatie, AHN2/identificatie_uq, AHN2/heeftMogelijkLiftschacht);
+
+			attribute<ratio> perc_vlak := heeft_AHN3_data
+					? rjoin(BAG/pand/identificatie, AHN3/identificatie_uq, AHN3/perc_vlak)
+					: rjoin(BAG/pand/identificatie, AHN2/identificatie_uq, AHN2/perc_vlak)
+				[ratio];
+
+			attribute<cm_uint16> hoogte := heeft_AHN3_data
+				? rjoin(BAG/pand/identificatie, AHN3/identificatie_uq, AHN3/hoogte)
+				: rjoin(BAG/pand/identificatie, AHN2/identificatie_uq, AHN2/hoogte);
+		}
+	}
+	#include<CorporatieBezitAmsterdam.dms>
+	container herlinzen
+	{
+		unit<uint32> SrcFileName
+		:	StorageName = "%SourceDataDir%/OWO/pand_met_woning.csv"
+		,	StorageType = "gdal.vect"
+		,	StorageReadOnly = "True"
+		{
+			attribute<uint32> posPC        := strpos(adres_range,' hnr: ') - 6;
+			attribute<string> postcode_org := substr(adres_range,posPC,6);
+			attribute<string> postcode     := 
+				(left(postcode_org,1) == '1' || left(postcode_org,1) == '2' || left(postcode_org,1) == '3' || left(postcode_org,1) == '4' ||
+				 left(postcode_org,1) == '5' || left(postcode_org,1) == '6' || left(postcode_org,1) == '7' || left(postcode_org,1) == '8' ||
+				 left(postcode_org,1) == '9')
+				 ? postcode_org
+				 : '';
+		}
+		unit<uint32> make_fss := SrcFileName
+		,	StorageName = "%SourceDataDir%/OWO/pand_met_woning_sel.fss"
+		{
+			attribute<string> postcode       := SrcFileName/postcode;
+			attribute<string> identificatie  := SrcFileName/identificatie;
+			
+			attribute<uint32> woningen_ongeschikt_totaal := uint32(SrcFileName/woningen_ongeschikt_totaal);
+			attribute<uint32> woningen_aanpasbaar_totaal := uint32(SrcFileName/woningen_aanpasbaar_totaal);
+			attribute<uint32> woningen_geschikt_totaal   := uint32(SrcFileName/woningen_geschikt_totaal);
+		}
+		unit<uint32> read_fss
+		:	StorageName = "%SourceDataDir%/OWO/pand_met_woning_sel.fss"
+		{
+			attribute<string> postcode;
+			attribute<string> identificatie;
+			
+			attribute<uint32> woningen_ongeschikt_totaal;
+			attribute<uint32> woningen_aanpasbaar_totaal;
+			attribute<uint32> woningen_geschikt_totaal;
+		}
+		container pand_met_woning_export
+		{
+			unit<uint32> context:= SrcFileName;
+			
+			parameter<string> Fieldlist      :=
+				  'identificatie;postcode;adres_range;nr_woningen;bouwjaar;hoogte_AHN_cm;nr_bouwlagen_ahn;area_m2_afgerond;sum_vbo_oppervlaktes;nr_bouwlagen_vbo_opp_pand;nr_bouwlagen;'
+				+ 'waarschijnlijk_lift_WooN;lift_risico_zone;waarschijnlijk_lift_AHN;waarschijnlijk_lift_vbo_gebruiksdoel;waarschijnlijk_lift;'
+				+ 'beukmaat_bepaald;has_beukmaat_510_kleiner;'
+				+ 'woningen_ongeschikt_totaal;woningen_aanpasbaar_totaal;woningen_geschikt_totaal;'
+				+ 'woningen_ongeschikt_MeerGezinsZonderLiftNietOpBeganeGrond;woningen_ongeschikt_BeukmaatTeKlein;woningen_ongeschikt_KlassiekeWinkelstraat;'
+				+ 'woningen_geschikt_MeerGezinsZonderLiftOpBeganeGrond;woningen_geschikt_Bungalow;woningen_geschikt_MeergezinsMetLift';
+			parameter<string> FieldSeperator := ';';
+			parameter<string> FileName       := '%LocalDataProjDir%/pand_met_woning_en_pc.csv';
+		
+			unit<uint32> field := range(uint32,0,strcount(Fieldlist,';')+1)
+			{
+				attribute<string> Name := ReadArray(FieldList,.,string,0);
+			}
+
+			parameter<string> Header  := FieldList;
+			attribute<string> Body (context) :=
+				=AsList(
+					+'String(context/'+Field/Name+')',' + '+Quote(FieldSeperator)+' +'
+				);
+
+			parameter<string> Result:= Header + system/NewLine + AsList(Body, system/NewLine)
+			,	StorageName = "=FileName"
+			,	StorageType = "str";
+		}
+	}
+}

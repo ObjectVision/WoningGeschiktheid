@@ -1,0 +1,35 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                                                                                                  //
+//           Configuratie voor het bepalen van het ongeschikt vastgoed voor ouderen                 //
+//                                                                                                  //
+//                           Stichting InFact & Object Vision 2018                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//          Hoofd configuratiebestand met verwijzingen naar specifieke bestanden                    //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+container OWO
+{
+	container system
+	{
+		parameter<string> emptystring := '';
+		parameter<string> newline     := '\n';
+	}
+	#include <eenheden.dms>
+	#include <klassificaties.dms>
+	#include <geografie.dms>
+	#include <brondata.dms>
+	#include <schemas.dms>
+	#include <analyses.dms>
+	
+	container ConfigSettings
+	{
+		container Overridable
+		{
+			parameter<string> AHNDrive := 'L:';
+		}
+	}
+}

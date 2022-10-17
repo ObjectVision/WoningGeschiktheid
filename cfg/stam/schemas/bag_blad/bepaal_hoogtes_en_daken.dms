@@ -1,0 +1,311 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                                                                                                  //
+//        Configuratie voor het genereren van vastgoed informatie voor EDM                          //
+//                                                                                                  //
+//                              Object Vision 2017                                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//          Configuratiebestand met schema om hoogtes en dakinformatie te bepalen                   //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template bepaal_hoogtes_en_daken
+{
+	// begin case parameters
+	unit<uint32> pand_met_woning;
+	unit<spoint> GridDomain;
+	attribute<cm_uint16> hoogte_ruw_offset (GridDomain);
+	attribute<cm_uint16> hoogte_int_offset (GridDomain);
+	// end case parameters
+
+	attribute<pand_met_woning> pand_met_woning_rel (GridDomain) := poly2grid(pand_met_woning/geometry, GridDomain);
+
+	container hoogte
+	{
+		container impl
+		{
+			container buffer_points
+			{
+				container max := bepaal_buffer_points(pand_met_woning, GridDomain, true);
+				container min := bepaal_buffer_points(pand_met_woning, GridDomain, false);
+
+				unit<uint32> all := union_unit(max/buffer_points, min/buffer_points)
+				{
+					attribute<point_rd>  point         := union_data(., max/buffer_points/point        , min/buffer_points/point);
+					attribute<pand_met_woning> pand_met_woning_rel := union_data(., max/buffer_points/pand_met_woning_rel, min/buffer_points/pand_met_woning_rel);
+					attribute<cm_uint16> hoogte_offset := union_data(., max/buffer_points/hoogte_offset, min/buffer_points/hoogte_offset);
+					attribute<string>    key           := string(pointCol(point[point_rd])) + '_' + string(pointRow(point[point_rd])) + '_' + string(pand_met_woning_rel);
+				}
+
+				unit<uint32> unique := unique(all/key)
+				{
+					attribute<all>       all_rel       := rlookup(values, all/key);
+					attribute<point_rd>  point         := all/point[all_rel];
+					attribute<pand_met_woning> pand_met_woning_rel := all/pand_met_woning_rel[all_rel];
+					attribute<cm_uint16> hoogte_offset := all/hoogte_offset[all_rel];
+				}
+			}
+
+			attribute<cm_uint16> pand_met_woning_hoogte_offset     (pand_met_woning) := rth_element(hoogte_ruw_offset, 0.7f, pand_met_woning_rel);
+			attribute<cm_uint16> pand_met_woning_hoogte_offset_nok (pand_met_woning) := rth_element(hoogte_ruw_offset, 0.9f, pand_met_woning_rel);
+
+			attribute<cm_uint16> buffer_hoogte_offset   (pand_met_woning) := rth_element(buffer_points/unique/hoogte_offset, 0.15f, buffer_points/unique/pand_met_woning_rel);
+		}
+
+		attribute<cm_uint16> pand_met_woning_hoogte (pand_met_woning) :=
+			(isDefined(impl/pand_met_woning_hoogte_offset) && isDefined(impl/buffer_hoogte_offset) && (impl/pand_met_woning_hoogte_offset > impl/buffer_hoogte_offset))
+				? (impl/pand_met_woning_hoogte_offset - impl/buffer_hoogte_offset)
+				: (0 / 0)[cm_uint16];
+		attribute<cm_uint16> nok_hoogte  (pand_met_woning) :=
+			(isDefined(impl/pand_met_woning_hoogte_offset_nok) && isDefined(impl/buffer_hoogte_offset) && (impl/pand_met_woning_hoogte_offset_nok > impl/buffer_hoogte_offset))
+				? (impl/pand_met_woning_hoogte_offset_nok - impl/buffer_hoogte_offset)
+				: (0 / 0)[cm_uint16];
+	}
+	container dak
+	{
+		attribute<cm>         hoogtes_in_pand_met_woning (GridDomain) := isDefined(pand_met_woning_rel) ? hoogte_ruw_offset[cm] - 10000[cm] : (0 / 0)[cm];
+		attribute<GridDomain> idGrid          (GridDomain) := id(GridDomain);
+
+		container gradient
+		{
+			attribute<cm>           N                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) - point(0s, 1s, spoint)] - hoogtes_in_pand_met_woning[(idGrid)];
+			attribute<cm>           Z                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point(0s, 1s, spoint)] - hoogtes_in_pand_met_woning[(idGrid)];
+			attribute<cm>           O                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) - point(1s, 0s, spoint)] - hoogtes_in_pand_met_woning[(idGrid)];
+			attribute<cm>           W                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point(1s, 0s, spoint)] - hoogtes_in_pand_met_woning[(idGrid)];
+
+			attribute<cm>           X                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) - point(1s, 0s, spoint)] - hoogtes_in_pand_met_woning[(idGrid) + point(1s, 0s, spoint)];
+			attribute<cm>           Y                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point(0s, 1s, spoint)] - hoogtes_in_pand_met_woning[(idGrid) - point(0s, 1s, spoint)];
+
+			attribute<cm>           amplitude        (GridDomain) := abs(N) + abs(Z) + abs(O) + abs(W);
+			attribute<cm>           amplitude_XY     (GridDomain) := abs(X) + abs(Y);
+
+			attribute<cl/stijlheid> stijlheid_rel    (GridDomain) := classify(amplitude   , cl/stijlheid/ClassBreaks);
+			attribute<cl/stijlheid> stijlheid_rel_XY (GridDomain) := classify(amplitude_XY, cl/stijlheid/ClassBreaks);
+
+			parameter<float32>      rc := 1f + sqrt(2f);
+
+			attribute<co/windstreek> windstreek_rel (GridDomain):= switch(
+				 case(amplitude <= 10[cm] , 8[co/windstreek])
+				,case( (Y >= (rc * abs(X))), 0[co/windstreek])
+				,case( (Y <  (rc * X)) && X <= (rc * Y), 1[co/windstreek])
+				,case( (X >= (rc * abs(Y))), 2[co/windstreek])
+				,case((-Y <  (rc * X)) && X <= (rc * -Y), 3[co/windstreek])
+				,case((-Y >= (rc * abs(X))), 4[co/windstreek])
+				,case((-Y <  (rc * -X)) && -X <= (rc *  -Y), 5[co/windstreek])
+				,case((-X >= (rc * abs(Y))), 6[co/windstreek])
+				,case(( Y <  (rc * -X)) && -X <= (rc *  Y), 7[co/windstreek])
+				,9[co/windstreek]
+			);
+			//attribute<string> windstreek_label (GridDomain):= co/windstreek/label[windstreek_rel];
+
+			unit<uint32> test := Subset(isDefined(windstreek_rel) && isDefined(pand_met_woning_rel))
+			, DialogType = "Map"
+			, DialogData = "vector"
+			{
+				attribute<point_rd>      vector         := point(x[nr_OrgEntity], y[nr_OrgEntity], point_rd);
+				attribute<co/windstreek> windstreek_rel := gradient/windstreek_rel[nr_OrgEntity];
+			}
+
+			attribute<co/daktype> daktype_rel (GridDomain) := Classify(windstreek_rel * 10b + stijlheid_rel, co/daktype/key);
+			//attribute<uint16>                        windstreek_amplitude        (GridDomain):= isDefined(amplitude) ? uint16(windstreek_rel) * 1000w + uint16(min_elem(amplitude, 999f)) : 0w / 0w;
+			//attribute<class/cl_windstreek_amplitude> cl_windstreek_amplitude_rel (GridDomain):= Classify(windstreek_amplitude, class/cl_windstreek_amplitude/ClassBreaks);
+
+			// Deze vorm van clustering gaat niet werken omdat er geen goede breaks bepaald kunnen worden
+
+			container class
+			{
+				unit<uint32> windstreek_amplitude_unique := unique(windstreek_amplitude)
+				{
+					attribute<uint16> delta := id(.) == 0 
+						? values
+						: values - values[id(.) - 1];
+				}
+
+				unit<uint32> cl_windstreek_amplitude := Subset(windstreek_amplitude_unique/delta > 5w)
+				{
+					attribute<uint16> ClassBreaks := windstreek_amplitude_unique/values[nr_OrgEntity];
+				}
+			}
+		}
+
+		container kromming
+		{
+			attribute<cm>   X               (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point( 1s, 0s,spoint)] + hoogtes_in_pand_met_woning[(idGrid) - point( 1s, 0s,spoint)] - 2f * hoogtes_in_pand_met_woning;
+			attribute<cm>   Y               (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point( 0s, 1s,spoint)] + hoogtes_in_pand_met_woning[(idGrid) - point( 0s, 1s,spoint)] - 2f * hoogtes_in_pand_met_woning;
+			attribute<bool> isOnderdeelVlak (GridDomain) := abs(kromming/X) <= 30[cm] && abs(kromming/Y) <= 30[cm];
+		}
+
+		container vlakken
+		{
+			attribute<co/daktype> daktype_rel_vlak (GridDomain) := kromming/isOnderdeelVlak ? gradient/daktype_rel : (0 / 0)[co/daktype];
+			unit<uint32> districts := district(daktype_rel_vlak)
+			{
+				attribute<uint32> unieke_districts_rel (GridDomain) := rlookup(districts, unieke_districts/values);
+			}
+			unit<uint32> unieke_districts := unique(districts/districts)
+			{
+				attribute<uint32> nr_cellen := pcount(districts/unieke_districts_rel);
+			}
+			unit<uint32> plus_1m2 := Subset(unieke_districts/nr_cellen > 4)
+			{
+				attribute<districts> values := unieke_districts/values[nr_OrgEntity];
+			}
+			attribute<plus_1m2>      plus_1m2_rel   (GridDomain) := rlookup(districts/districts, plus_1m2/values);
+			attribute<cl/stijlheid>  stijlheid_rel  (GridDomain) := isDefined(plus_1m2_rel) ? gradient/stijlheid_rel  : (0 / 0)[cl/stijlheid];
+			attribute<co/windstreek> windstreek_rel (GridDomain) := isDefined(plus_1m2_rel) ? gradient/windstreek_rel : (0 / 0)[cl/stijlheid];
+
+
+			unit<uint32> plus_1m2_rel_points := Subset(isDefined(plus_1m2_rel))
+			,	DialogType = "Map"
+			,	DialogData = "Nr_OrgEntity"
+			{
+				attribute<plus_1m2>      plus_1m2_rel         := vlakken/plus_1m2_rel[nr_OrgEntity];
+				attribute<pand_met_woning>     pand_met_woning_rel_vlak   := pand_met_woning_rel[nr_OrgEntity];
+				attribute<string>        pand_met_woning_dakvlak_key     := string(pand_met_woning_rel_vlak) + '_' + string(plus_1m2_rel);
+				attribute<pand_met_woning_dakvlak>  pand_met_woning_dakvlak_rel     := rlookup(pand_met_woning_dakvlak_key, pand_met_woning_dakvlak/values);
+
+				attribute<cm_uint16>     hoogte_offset        := hoogte_ruw_offset[nr_OrgEntity];
+
+				attribute<cm>            amplitude            := gradient/amplitude[nr_OrgEntity];
+				attribute<co/windstreek> windstreek_rel       := gradient/windstreek_rel[nr_OrgEntity];
+
+				attribute<cm>            dX                   := gradient/X[nr_OrgEntity];
+				attribute<cm>            dY                   := gradient/Y[nr_OrgEntity];
+
+				attribute<point_rd>      geometry             := nr_OrgEntity[point_rd];
+				attribute<m>             X                    := pointCol(geometry) * 1[m];
+				attribute<m>             Y                    := pointRow(geometry) * 1[m];
+			}
+
+			unit<uint32> pand_met_woning_dakvlak := unique(plus_1m2_rel_points/pand_met_woning_dakvlak_key)
+			,	DialogType = "Map"
+			,	DialogData = "geometry"
+			{
+				attribute<point_rd> geometry (poly):= Points2Sequence(geom/poinset/point,geom/poinset/sequence,geom/poinset/ordinal);
+				container geom
+				{
+					attribute<m>        minX (pand_met_woning_dakvlak) := min(plus_1m2_rel_points/X, plus_1m2_rel_points/pand_met_woning_dakvlak_rel);
+					attribute<m>        minY (pand_met_woning_dakvlak) := min(plus_1m2_rel_points/Y, plus_1m2_rel_points/pand_met_woning_dakvlak_rel);
+					attribute<m>        maxX (pand_met_woning_dakvlak) := max(plus_1m2_rel_points/X, plus_1m2_rel_points/pand_met_woning_dakvlak_rel);
+					attribute<m>        maxY (pand_met_woning_dakvlak) := max(plus_1m2_rel_points/Y, plus_1m2_rel_points/pand_met_woning_dakvlak_rel);
+					
+					unit<uint32> poinset:= union_unit(pand_met_woning_dakvlak,pand_met_woning_dakvlak,pand_met_woning_dakvlak,pand_met_woning_dakvlak,pand_met_woning_dakvlak)
+					{
+						attribute<point_rd>     point    := union_data(., point(minX,maxY,point_rd),point(maxX,maxY,point_rd),point(maxX,minY,point_rd),point(minX,minY,point_rd),point(minX,maxY,point_rd));
+						attribute<pand_met_woning_dakvlak> sequence := union_data(.,id(pand_met_woning_dakvlak),id(pand_met_woning_dakvlak),id(pand_met_woning_dakvlak),id(pand_met_woning_dakvlak),id(pand_met_woning_dakvlak));
+						attribute<uint32>       ordinal  := union_data(.,const(0,pand_met_woning_dakvlak),const(1,pand_met_woning_dakvlak),const(2,pand_met_woning_dakvlak),const(3,pand_met_woning_dakvlak),const(4,pand_met_woning_dakvlak));
+					}
+				}
+
+				attribute<uint32>        nr_vlakken           := const(1,.);
+
+				attribute<pand_met_woning>     pand_met_woning_rel        := rjoin(values, plus_1m2_rel_points/pand_met_woning_dakvlak_key, plus_1m2_rel_points/pand_met_woning_rel_vlak);
+				attribute<string>        pand_met_woning_identificatie   := pand_met_woning/identificatie[pand_met_woning_rel];
+
+				attribute<m2>            nr_m2                := float32(pcount(plus_1m2_rel_points/pand_met_woning_dakvlak_rel) / 4) * 1[m2];
+
+				attribute<cm>            amplitude            := mean(plus_1m2_rel_points/amplitude, plus_1m2_rel_points/pand_met_woning_dakvlak_rel);
+				attribute<cl/stijlheid>  co_stijlheid         := classify(amplitude, cl/stijlheid/ClassBreaks);
+				attribute<string>        windstreek           := co/windstreek/label[rjoin(values, plus_1m2_rel_points/pand_met_woning_dakvlak_key, plus_1m2_rel_points/windstreek_rel)];
+
+				attribute<cm_uint16>     hoogte_offset        := rth_element(plus_1m2_rel_points/hoogte_offset, 0.7f, plus_1m2_rel_points/pand_met_woning_dakvlak_rel);
+				attribute<cm_uint16>     buffer_hoogte_offset := hoogtes_en_daken/hoogte/impl/buffer_hoogte_offset[pand_met_woning_rel];
+
+				attribute<cm_uint16>     hoogte               :=
+					(isDefined(hoogte_offset) && isDefined(buffer_hoogte_offset) && (hoogte_offset > buffer_hoogte_offset))
+						? (hoogte_offset - buffer_hoogte_offset)
+						: (0 / 0)[cm_uint16];
+						
+				attribute<cm>            dX                   := mean(plus_1m2_rel_points/dX, plus_1m2_rel_points/pand_met_woning_dakvlak_rel);
+				attribute<cm>            dY                   := mean(plus_1m2_rel_points/dY, plus_1m2_rel_points/pand_met_woning_dakvlak_rel);
+
+			}
+		}
+	}
+	container liftschachten
+	{
+		unit<uint32> pand_met_woning_alle := pand_met_woning
+		{
+			attribute<cl/verdiepingshoogte> verdiepingshoogte_rel := classify(pand_met_woning/bouwjaar, cl/verdiepingshoogte/bouwjaar);
+			
+			attribute<float32> bouwlagen_ahn_noemer  := float32(cl/verdiepingshoogte/plafondhoogte[verdiepingshoogte_rel]) + float32(cl/verdiepingshoogte/vloerhoogte);
+			attribute<float32> bouwlagen_ahn_quotient:= float32(pand_met_woning/hoogte) / float32(bouwlagen_ahn_noemer[cm_uint16]);
+			attribute<uint8>   bouwlagen_ahn         := uint8(round(bouwlagen_ahn_quotient + 0.2f)); // 2.3 ronden we af naar 3 (soutterein ??)
+
+//				attribute<m2>      footprint             := area(Brondata/pand_met_woningplus/geometry, m2);
+//				attribute<m2>      sum_vbo_oppervlaktes  := sum(Brondata/vbo/oppervlakte[m2], Brondata/vbo/pand_met_woningplus_rel);
+//				attribute<float32> bouwlagen_vbo_quotient:= sum_vbo_oppervlaktes / footprint;
+//				attribute<uint8>   bouwlagen_vbo         := uint8(round(bouwlagen_vbo_quotient + 0.2f)); // 2.3 ronden we af naar 3 (soutterein ??)
+
+			attribute<bool>    is_meergezinspand     := Geschiktheid/pand_met_woning/is_Meergezins[nr_OrgEntity];
+//				attribute<bool>    is_gebouwd_voor_2007  := bouwjaar > 1000[jaar] && bouwjaar < 2008[jaar];
+			
+			attribute<bool>    nr_bouwlagen_plus1    := bouwlagen_ahn > 1b;
+
+			// dakvlakken
+//			attribute<m2>        grootte_dakvlakken             := sum(hoogtes_en_daken/dak/vlakken/pand_met_woning_dakvlak/nr_m2, hoogtes_en_daken/dak/vlakken/pand_met_woning_dakvlak/pand_met_woning_rel);
+//			attribute<cm_uint16> hoogte_hoogste_dakvlak_offset  := max(hoogtes_en_daken/dak/vlakken/pand_met_woning_dakvlak/potentieel_hoogste_dakvlak/hoogte_offset , hoogtes_en_daken/dak/vlakken/pand_met_woning_dakvlak/potentieel_hoogste_dakvlak/pand_met_woning_rel);
+//			attribute<uint32>    hoogste_pand_met_woning_dakvlak_rel := 
+//				rlookup( string(hoogte_hoogste_dakvlak_offset) + '_' + string(id(pand_met_woning))
+//						,string(hoogtes_en_daken/dak/vlakken/pand_met_woning_dakvlak/potentieel_hoogste_dakvlak/hoogte_offset) + '_' + string(hoogtes_en_daken/dak/vlakken/pand_met_woning_dakvlak/potentieel_hoogste_dakvlak/pand_met_woning_rel)
+//						);
+			//attribute<point_rd> hoogste_pand_met_woning_dakvlak_geometry (poly):= hoogtes_en_daken/dak/vlakken/pand_met_woning_dakvlak/potentieel_hoogste_dakvlak/geometry[hoogste_pand_met_woning_dakvlak_rel];
+		}
+
+		unit<uint32> pand_met_woning_voor_liftbepaling := Subset(pand_met_woning_alle/bouwlagen_ahn > 2b && pand_met_woning_alle/is_meergezinspand)
+		,	DialogData = "geometry"
+		,	DialogType = "Map"
+		{
+			attribute<string>    identificatie            := pand_met_woning/identificatie[nr_OrgEntity];
+
+			attribute<point_rd>  geometry          (poly) := pand_met_woning_alle/geometry[nr_OrgEntity];
+			attribute<cm_uint16> hoogte                   := pand_met_woning/hoogte[nr_OrgEntity];
+			attribute<cm_uint16> hoogte_maaiveld_offset   := pand_met_woning/hoogte_maaiveld_offset[nr_OrgEntity];
+			attribute<ratio>     ratio_vlak               := pand_met_woning/ratio_vlak[nr_OrgEntity];
+			attribute<bool>      heeftMogelijkLiftschacht := any(bepaal_potentiele_liftschachtpunten/districts/isMogelijkLiftschacht, bepaal_potentiele_liftschachtpunten/pand_met_woning_voor_liftbepaling_rel);
+
+		}
+
+
+		container bepaal_potentiele_liftschachtpunten
+		{
+			attribute<pand_met_woning_voor_liftbepaling> pand_met_woning_voor_liftbepaling_rel (GridDomain) := rlookup(pand_met_woning_rel, pand_met_woning_voor_liftbepaling/nr_OrgEntity);
+	
+			attribute<cm_uint16> hoogte_met_offset_pot                   (GridDomain) := 
+				(potential(  float32(AHN/ruw/hoogte_met_offset)          , Geografie/kernel_interpolate/distMatr) / 
+				 potential(isDefined(AHN/ruw/hoogte_met_offset) ? 1f : 0f, Geografie/kernel_interpolate/distMatr))
+				[cm_uint16];
+
+			attribute<cm_uint16> hoogte_met_offset_interpolated          (GridDomain) := isNull(AHN/ruw/hoogte_met_offset)     ? hoogte_met_offset_pot          : AHN/ruw/hoogte_met_offset;
+			attribute<cm_uint16> ruw_hoogte_offset                       (GridDomain) := isDefined(pand_met_woning_voor_liftbepaling_rel) ? hoogte_met_offset_interpolated : 0[cm_uint16] / 0w;
+
+			attribute<cm_uint16> pand_met_woning_hoogte_offset_per_pand_met_woning             (pand_met_woning)       := rth_element(hoogte_ruw_offset, 0.7f, pand_met_woning_rel);
+			attribute<cm_uint16> pand_met_woning_hoogte_offset                      (GridDomain) := isDefined(pand_met_woning_voor_liftbepaling_rel) ? pand_met_woning_hoogte_offset_per_pand_met_woning[pand_met_woning_rel] : 0[cm_uint16] / 0w;
+
+			attribute<cm>       d_ruw_pand_met_woning_hoogte                        (GridDomain) := hoogte_ruw_offset[cm] - pand_met_woning_hoogte_offset[cm], cdf ="Klassificaties/cl/cmDif/ClassBreaks";
+			attribute<uint32>   d_ruw_pand_met_woning_hoogte_150_400cm_uint32       (GridDomain) := d_ruw_pand_met_woning_hoogte >= 150[cm] && d_ruw_pand_met_woning_hoogte < 400[cm] ? 1 : 0 / 0;
+
+			attribute<bool>     heeftMogelijkLiftschacht                 (GridDomain) := any(districts/isMogelijkLiftschacht, pand_met_woning_voor_liftbepaling_rel)[pand_met_woning_voor_liftbepaling_rel];
+
+			unit<uint32> districts := district(d_ruw_pand_met_woning_hoogte_150_400cm_uint32)
+			{
+				attribute<m2>   size                              := float32(pcount(districts)) / 4[per_m2];
+				attribute<bool> isMogelijkLiftschacht (GridDomain):= IsDefined(districts) && size[districts] > 4[m2] ;
+			}
+		}
+		/*
+		unit<uint32> pand_met_woning_voor_liftbepaling_vlakke_daken := Subset(pand_met_woning_voor_liftbepaling_alle_daken/ratio_vlak > 0.60f)
+		,	DialogData = "geometry"
+		,	DialogType = "Map"
+		{
+			attribute<string>    identificatie           := pand_met_woning_voor_liftbepaling_alle_daken/identificatie[nr_OrgEntity];
+
+			attribute<point_rd>  geometry          (poly):= pand_met_woning_voor_liftbepaling_alle_daken/hoogte[nr_OrgEntity];
+			attribute<cm_uint16> hoogte                  := pand_met_woning_voor_liftbepaling_alle_daken/hoogte[nr_OrgEntity];
+			attribute<cm_uint16> hoogte_maaiveld_offset  := pand_met_woning_voor_liftbepaling_alle_daken/hoogte_maaiveld_offset[nr_OrgEntity];
+		}
+		*/
+	}
+}

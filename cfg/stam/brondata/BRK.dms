@@ -1,0 +1,93 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                                                                                                  //
+//        Configuratie voor het genereren van vastgoed informatie voor EDM                          //
+//                                                                                                  //
+//                              Object Vision 2017                                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                  Configuratiebestand met brondata > vastgoed > BRK                               //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+container BRK
+{
+	parameter<string> date := '20180213';
+	parameter<string> dir  := '%SourceDataDir%/BRK/' + date ;
+
+	container import
+	{
+		container perceel_fss
+		{
+			unit<uint32> src
+			:	StorageName     = "=dir + '/perceel_nl.fss'"
+			,	SyncMode        = "none"
+			,	StorageReadOnly = "True"
+			{
+				attribute<point_rd> geometry (polygon);
+
+				attribute<string> AKRKADASTRALEGEMEENTECODE;
+				attribute<string> SECTIE ;
+				attribute<int32>  PERCEELNUMMER;
+
+				container bbox
+				{
+					attribute<point_rd> lb (src) := lower_bound(geometry);
+					attribute<point_rd> ub (src) := upper_bound(geometry);
+					attribute<m> dx        (src) := pointCol(ub)[m] - pointCol(lb)[m];
+					attribute<m> dy        (src) := pointRow(ub)[m] - pointRow(lb)[m];
+				}
+
+				attribute<m> x_min := PointCol(bbox/lb)[m];
+				attribute<m> x_max := PointCol(bbox/ub)[m];
+				attribute<m> y_min := PointRow(bbox/lb)[m];
+				attribute<m> y_max := PointRow(bbox/ub)[m];
+
+				attribute<point_rd>           centroid               := point(x_min + 0.5f * bbox/dx, y_min + 0.5f * bbox/dy, point_rd); // de centroid_or_mid geeft incorrecte resultaten voor sommige geometrieen.
+				attribute<KadastraleGemeente> KadastraleGemeente_rel := rlookup(AKRKADASTRALEGEMEENTECODE, KadastraleGemeente/values);
+				
+				// provincies bepalen we via de gemeente, om te voorkomen dat de centroid van het polygoon net in een andere gemeente/provincie valt.
+				attribute<Algemeen/provincie> provincie_rel_kgem     := KadastraleGemeente/provincie_rel[KadastraleGemeente_rel];
+				attribute<Algemeen/provincie> provincie_rel          := MakeDefined(provincie_rel_kgem, rjoin(centroid, buiten_provincie/centroid, buiten_provincie/provincie_rel)), DisableStorage = "True";
+
+				attribute<float32>            opp_test               := area(geometry, float32), DisableStorage = "True"; // moeten altijd positief zijn...
+			}
+
+			unit<uint32> KadastraleGemeente := unique(src/AKRKADASTRALEGEMEENTECODE)
+			{
+				attribute<m>                  X             := mean(PointCol(src/centroid)[m], src/KadastraleGemeente_rel);
+				attribute<m>                  Y             := mean(PointRow(src/centroid)[m], src/KadastraleGemeente_rel);
+				attribute<point_rd>           locatie       := point(X, Y, point_rd);
+
+				attribute<Algemeen/provincie> provincie_rel := point_in_polygon(locatie, Algemeen/provincie/geometry_rd), DisableStorage = "True";
+				attribute<string>             provincienaam := Algemeen/provincie/name[provincie_rel];
+			}
+
+			unit<uint32> buiten_provincie := Subset(isNull(src/provincie_rel_kgem))
+			{
+				attribute<point_rd>           geometry (polygon)       := src/geometry[nr_OrgEntity];
+				attribute<point_rd>           centroid                 := src/centroid[nr_OrgEntity];
+				container                     dichtbijzijnde_provincie := connect_info(Algemeen/provincie/geometry, centroid);
+				attribute<Algemeen/provincie> provincie_rel            := dichtbijzijnde_provincie/ArcID;
+			}
+		}
+
+		container write_fss_per_province :=
+			for_each_ne
+			(
+				 Algemeen/provincie/name
+				,'schemas/write_fss_per_province(' + string(id(Algemeen/provincie)) + ')'
+			)
+		{
+			parameter<string> generate_all_expr :=  AsList(Algemeen/provincie/name  + '/perceel/write_fss', ';');
+			parameter<string> generate_all      := 'ready', ExplicitSuppliers = "= generate_all_expr";
+		}
+	}
+
+	container fss := for_each_ne
+	(
+		 Algemeen/provincie/name
+		,'schemas/read_fss_per_province(' + quote(Algemeen/provincie/name) + ')'
+	);
+}

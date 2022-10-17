@@ -1,0 +1,242 @@
+//                                                                                                  //
+//           Configuratie voor het bepalen van het ongeschikt vastgoed voor ouderen                 //
+//                                                                                                  //
+//                           Stichting InFact & Object Vision 2018                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                  Configuratiebestand met brondata > vastgoed > BAG                               //
+//                  Data wordt gelezen uit een snapshot die met de BAG                              //
+//                  verwerkingsscripts gemaakt zijn gemaakt                                         //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+container BAG
+{
+	parameter<string> snapshotdate := '20180701';
+//	parameter<string> snapshotdir  := '%SourceDataDir%/BAG/snapshots.ext/AmsterdamAmstelveen/' + snapshotdate;
+//	parameter<string> snapshotdir  := '%SourceDataDir%/BAG/snapshots.ext/GrootNH/' + snapshotdate;
+	parameter<string> snapshotdir  := '%SourceDataDir%/BAG/snapshots.ext/' + snapshotdate;
+
+	container impl
+	{
+		parameter<string> ligplaats_src_name        := snapshotdir + '/ligplaats.fss'; 
+		parameter<string> standplaats_src_name      := snapshotdir + '/standplaats.fss'; 
+		parameter<string> pand_src_name             := snapshotdir + '/pand.fss'; 
+		parameter<string> vbo_src_name              := snapshotdir + '/vbo.fss'; 
+		parameter<string> nummeraanduiding_src_name := snapshotdir + '/nummeraanduiding.fss'; 
+		parameter<string> openbareruimte_src_name   := snapshotdir + '/openbareruimte.fss'; 
+		parameter<string> woonplaats_src_name       := snapshotdir + '/woonplaats.fss'; 
+		parameter<string> adres_src_name            := snapshotdir + '/adres.fss'; 
+	}
+
+	unit<uint32> vbo_import
+	:	StorageName     = "= impl/vbo_src_name"
+	,	StorageReadOnly = "True"
+	,	SyncMode        = "None"
+	,	DialogType      = "Map"
+	,	DialogData      = "geometry"
+	{
+		attribute<string>      identificatie;
+
+		attribute<point_rd_mm> geometry_mm;
+		attribute<point_rd>    geometry := geometry_mm[point_rd];
+
+		attribute<int32>       oppervlakte;
+		attribute<string>      nummeraanduiding_id;
+		attribute<string>      postcode := rjoin(nummeraanduiding_id, adres/nummeraanduiding_id, adres/postcode);
+		attribute<string>      pand_id_geom;
+		attribute<pand>        pand_rel := rlookup(pand_id_geom, pand/identificatie);
+
+		container gebruiksdoelen :=
+			for_each_ndv(
+				co/gebruiksdoel_vbo/name
+				, .
+				, bool
+			)
+		{
+			attribute<bool> alle (vbo) := =AsList(co/gebruiksdoel_vbo/name, ' && ');
+		}
+		attribute<string>      gemeentecode := substr(identificatie,0,4);
+		attribute<Brondata/pc6_pc6_weg_300m> pc6_pc6_weg_300m_rel:= rlookup(postcode, Brondata/pc6_pc6_weg_300m/PC6_org);
+		
+		attribute<nummeraanduiding> nummeraanduiding_rel := rlookup(nummeraanduiding_id, nummeraanduiding/identificatie);
+	}
+
+	unit<uint32> vbo 
+//	:= Subset(isDefined(rlookup(vbo_import/postcode, Brondata/postcode_NH_300m/Values)))
+	:= Subset(isDefined(vbo_import/geometry))
+	
+	,	DialogType      = "Map"
+	,	DialogData      = "geometry"
+	,	FreeData        = "False"
+	{
+		attribute<string>      identificatie       := vbo_import/identificatie[nr_OrgEntity];
+		attribute<point_rd>    geometry            := vbo_import/geometry[nr_OrgEntity];
+
+		attribute<int32>       oppervlakte         := vbo_import/oppervlakte[nr_OrgEntity];
+		attribute<string>      nummeraanduiding_id := vbo_import/nummeraanduiding_id[nr_OrgEntity];
+		attribute<string>      postcode            := vbo_import/postcode[nr_OrgEntity];
+		attribute<string>      pand_id_geom        := vbo_import/pand_id_geom[nr_OrgEntity];
+		attribute<pand>        pand_rel            := rlookup(pand_id_geom, pand/identificatie);
+
+		container gebruiksdoelen :=
+			for_each_nedv(
+				co/gebruiksdoel_vbo/name
+				,'vbo_import/gebruiksdoelen/' + co/gebruiksdoel_vbo/name + '[nr_OrgEntity]'
+				, .
+				, bool
+			)
+		{
+			attribute<bool> alle (vbo) := =AsList(co/gebruiksdoel_vbo/name, ' && ');
+		}
+	}
+
+	unit<uint32> nummeraanduiding
+	:	StorageName     = "= impl/nummeraanduiding_src_name"
+	,	StorageReadOnly = "True"
+	,	SyncMode        = "None"
+	{
+		attribute<string> identificatie;
+
+		attribute<int32>  huisnummer;
+		attribute<string> huisletter;
+		attribute<string> toevoeging;
+		attribute<string> postcode;
+		attribute<bool>   postcodeBevatSpecifiekeLetters:=
+			strcount(uppercase(postcode),'F')  > 0
+		||	strcount(uppercase(postcode),'I')  > 0
+		||	strcount(uppercase(postcode),'O')  > 0
+		||	strcount(uppercase(postcode),'Q')  > 0
+		||	strcount(uppercase(postcode),'U')  > 0
+		||	strcount(uppercase(postcode),'Y')  > 0
+		||	strcount(uppercase(postcode),'SA') > 0
+		||	strcount(uppercase(postcode),'SD') > 0
+		||	strcount(uppercase(postcode),'SS') > 0;
+
+		attribute<string> typeAdresseerbaarObject;
+		attribute<string> openbareruimte_id;
+
+		attribute<string> pht:= postcode + '_' + string(huisnummer) + '_' + huisletter + '_' + toevoeging, DisableStorage = "True";
+		
+		attribute<bool> heeft_woonfunctie := any(vbo_import/gebruiksdoelen/woon, vbo_import/nummeraanduiding_rel);
+	}
+
+	unit<uint32> openbareruimte
+	:	StorageName     = "= impl/openbareruimte_src_name"
+	,	StorageReadOnly = "True"
+	,	SyncMode        = "None"
+	{
+		attribute<string> identificatie;
+
+		attribute<string> naam;
+		attribute<string> type;
+		attribute<string> woonplaats_id;
+	}
+
+	unit<uint32> woonplaats
+	:	StorageName     = "= impl/woonplaats_src_name"
+	,	StorageReadOnly = "True"
+	,	SyncMode        = "None"
+	,	DialogType      = "Map"
+	,	DialogData      = "geometry"
+	{
+		attribute<string>      identificatie;
+
+		attribute<point_rd_mm> geometry_mm (poly);
+		attribute<point_rd>    geometry    (poly) := geometry_mm[point_rd];
+
+		attribute<string>      woonplaatsNaam;
+	}
+
+	unit<uint32> pand
+	:	StorageName     = "= impl/pand_src_name"
+	,	StorageReadOnly = "True"
+	,	SyncMode        = "None"
+	,	DialogType      = "Map"
+	,	DialogData      = "geometry"
+	{
+		attribute<string>          identificatie;
+
+		attribute<point_rd_mm>     geometry_mm    (poly);
+		attribute<point_rd>        geometry       (poly) := value(geometry_mm, point_rd);
+
+		attribute<eenheden/jaar>   bouwjaar;
+//		attribute<uint32>          nr_buurpanden;
+		attribute<co/pandtype_geo> woonpand_type;
+		//attribute<bool>            in_aanbouw       := lowercase(meta/status) == 'bouwvergunning verleend' || lowercase(meta/status) == 'bouw gestart';
+
+		container meta
+		{
+			attribute<string> status     (pand);
+			attribute<int32>  begindatum (pand);
+			attribute<int32>  einddatum  (pand);
+		}
+
+		attribute<m2>     sum_vbo_oppervlaktes      := sum(vbo/oppervlakte[m2], vbo/pand_rel);
+		attribute<m2>     sum_vbo_woon_oppervlaktes := sum(vbo/gebruiksdoelen/woon ? vbo/oppervlakte[m2] : 0[m2], vbo/pand_rel);
+		attribute<uint32> nr_vbo                    := pcount(vbo/pand_rel);
+
+		attribute<uint32> nr_woningen               := sum(vbo/gebruiksdoelen/woon   ? 1 : 0, BAG/vbo/pand_rel);
+		attribute<bool>   heeft_woningen            := nr_woningen > 0;
+		attribute<bool>   is_meergezins             := nr_woningen > 1;
+
+		attribute<uint32> nr_winkels                := sum(vbo/gebruiksdoelen/winkel ? 1 : 0, vbo/pand_rel);
+		attribute<bool>   heeft_winkel              := nr_winkels > 0;
+
+		attribute<bool>   heeft_zorg                := any(vbo/gebruiksdoelen/gezondheidszorg , vbo/pand_rel);
+		attribute<bool>   heeft_bijeenkomst         := any(vbo/gebruiksdoelen/bijeenkomst,      vbo/pand_rel);
+		attribute<bool>   heeft_overige_functie     := any(vbo/gebruiksdoelen/overige_gebruiks, vbo/pand_rel);
+
+		attribute<string> adres_range               := AsItemList(adres/uniquePCperPand/adres_range, adres/uniquePCperPand/pand_rel);
+		attribute<string> postcode                  := AsItemList(adres/uniquePCperPand/postcode, adres/uniquePCperPand/pand_rel);
+
+	}
+
+	unit<uint32> adres
+	:	StorageName     = "= impl/adres_src_name"
+	,	StorageReadOnly = "True"
+	,	SyncMode        = "None"
+	,	DialogType      = "Map"
+	,	DialogData      = "geometry"
+	{
+		attribute<point_rd>          geometry;
+		attribute<string>            nummeraanduiding_id;
+		attribute<string>            straatnaam;
+		attribute<string>            postcode;
+		attribute<int32>             huisnummer;
+		attribute<string>            huisletter;
+		attribute<string>            toevoeging;
+		attribute<string>            woonplaatsnaam;
+		
+		attribute<bool>              heeft_woonfunctie := rjoin(nummeraanduiding_id, nummeraanduiding/identificatie, nummeraanduiding/heeft_woonfunctie);
+		
+		attribute<vbo>               vbo_rel   := rlookup(nummeraanduiding_id, vbo/nummeraanduiding_id);
+		attribute<pand>              pand_rel  := vbo/pand_rel[vbo_rel];
+		attribute<string>            PCperPand := postcode + '_' + string(pand_rel);
+		
+		
+		attribute<uniquePCperPand>   uniquePCperPand_Rel := rlookup(PCperPand, uniquePCperPand/values);
+
+		unit<uint32> uniquePCperPand := unique(PCperPand)
+		{
+			attribute<string> postcode        := substr(values, 0, strpos(values,'_'));
+			attribute<pand>   pand_rel        := substr(values, strpos(values,'_') +1 )[pand];
+			attribute<string> straatnaam      := rjoin(values, adres/PCperPand, adres/straatnaam);
+			attribute<int32>  hnr_min         := min(huisnummer,uniquePCperPand_rel);
+			attribute<int32>  hnr_max         := max(huisnummer,uniquePCperPand_rel);
+			attribute<string> woonplaatsnaam  := first(adres/woonplaatsnaam, uniquePCperPand_rel);
+
+			attribute<string> adres_range     := woonplaatsnaam + ' ' + straatnaam + ' '+ postcode + ' hnr: ' + string(hnr_min) + ' - ' + string(hnr_max);
+		}
+	}
+	unit<uint32> adres_NH := Subset(isDefined(point_in_polygon(adres/geometry, NH/Geometry )))
+	,	DialogType      = "Map"
+	,	DialogData      = "geometry"
+	{
+		attribute<point_rd> geometry := adres/geometry[nr_OrgEntity];
+		attribute<string>   postcode := adres/postcode[nr_OrgEntity];
+	}
+
+
+}

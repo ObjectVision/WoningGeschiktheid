@@ -1,0 +1,82 @@
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                                                                                                  //
+//        Configuratie voor het genereren van vastgoed informatie voor EDM                          //
+//                                                                                                  //
+//                              Object Vision 2017                                                  //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                  //
+//                         Configuratiebestand met schema's                                         //
+//                                                                                                  //
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+
+container schemas: Using = "Eenheden;Geografie"
+{
+	// Sectie Grid
+	template define_grid
+	{
+		// begin case parameters
+		parameter<m> gridsizeX;
+		parameter<m> gridsizeY;
+		container bbox;
+		// end case parameters
+
+		parameter<int16> nr_cols := int16((bbox/x_max - bbox/x_min) / gridsizeX);
+		parameter<int16> nr_rows := int16((bbox/y_max - bbox/y_min) / gridsizeY);
+
+		unit<spoint> domain :=
+			range(
+				 gridset(
+					 point_rd
+					,point(float32(gridsizeX), float32(-gridsizeY), point_rd)
+					,point(bbox/x_min, bbox/y_max, point_rd)
+					,spoint
+				)
+				,point(0s, 0s)
+				,point(nr_cols,nr_rows)
+			)
+		,	DialogData = "point_rd";
+	}
+
+	// SECTIE Bepaal welke AHN2/3 bestanden aanwezig zijn.
+	template bepaal_existing_files
+	{
+		// begin case parameters
+		parameter<uint32> blad_rel;
+		//
+		parameter<string> int_filename_AHN2_3 := ExistingFile(int_filename_AHN2[blad_rel], int_filename_AHN3[blad_rel]);
+		parameter<string> ruw_filename_AHN2_3 := ExistingFile(ruw_filename_AHN2[blad_rel], ruw_filename_AHN3[blad_rel]);
+		parameter<string> int_filename        := ExistingFile('missing', int_filename_AHN2_3);
+		parameter<string> ruw_filename        := ExistingFile('missing', ruw_filename_AHN2_3);
+	}
+
+	// SECTIE Verwerk AHN Data voor BAG pand plus objecten
+	template verwerk_AHNSet
+	{
+		// begin case parameters
+		parameter<string> AHNSet;
+		container readdomain;
+		// end case parameter
+
+		container per_blad :=
+			for_each_ne(
+				  readdomain/bag_blad/name
+				,'schemas/bag_blad/verwerk_blad (' + string(readdomain/bag_blad/values) + ',' + quote(readdomain/bag_blad/unit) + ')'
+			);
+
+		parameter<string> genetare_all      := 'Ready', ExplicitSuppliers = "= genetare_all_expr";
+		parameter<string> genetare_all_expr := AsList('per_blad/' + readdomain/bag_blad/name + '/export/Generate', ';');
+	}
+
+	// Sectie lees AHN set vanuit verschillende BAG perspectieven
+	#include <ahn_set_to_BAG_perspectieven.dms>
+
+	// Sectie verwerk gegevens per bag blad
+	#include <bag_blad.dms>
+	
+	// SECTIE genereren per provincie
+	//#include <data_per_provincie.dms>
+	#include <ahn_merge.dms>
+
+}

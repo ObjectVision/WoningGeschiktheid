@@ -1,0 +1,101 @@
+container CorporatieBezitAmsterdam
+{
+	unit<uint32> gemeenteCBS
+	:	StorageName     = "%SourceDataDir%/CBS/2017/gem_2017.shp"
+	,	StorageType     = "gdal.vect"
+	,	StorageReadOnly = "True"
+	,	DialogData      = "geometry"
+	,	DialogType      = "Map"
+	{
+		attribute<point_rd> geometry (polygon);
+	}
+	unit<uint32> gemeenteCBS_met_bezit := unique(AFWC_2017/gemeenteCBS_rel)
+	,	DialogData      = "geometry"
+	,	DialogType      = "Map"
+	{
+		attribute<point_rd> geometry (polygon) := gemeenteCBS/geometry[values];
+		attribute<string>   GM_NAAM            := gemeenteCBS/GM_NAAM[values];
+	}
+	unit<uint32> BAG_woonadressen_in_gemeenteCBS_met_bezit := Subset(IsDefined(point_in_polygon(Brondata/BAG/adres/Geometry,gemeenteCBS_met_bezit/geometry)) && Brondata/BAG/adres/heeft_woonfunctie)
+	,	DialogData      = "geometry"
+	,	DialogType      = "Map"
+	{
+		attribute<point_rd> geometry            := Brondata/BAG/adres/Geometry[Nr_OrgEntity];
+		attribute<string>   nummeraanduiding_id := Brondata/BAG/adres/nummeraanduiding_id[Nr_OrgEntity];
+		attribute<string>   straatnaam          := Brondata/BAG/adres/straatnaam[Nr_OrgEntity];
+		attribute<string>   postcode            := Brondata/BAG/adres/postcode[Nr_OrgEntity];
+		attribute<int32>    huisnummer          := Brondata/BAG/adres/huisnummer[Nr_OrgEntity];
+		attribute<string>   huisletter          := Brondata/BAG/adres/huisletter[Nr_OrgEntity];
+		attribute<string>   toevoeging          := Brondata/BAG/adres/toevoeging[Nr_OrgEntity];
+		attribute<string>   woonplaatsnaam      := Brondata/BAG/adres/woonplaatsnaam[Nr_OrgEntity];
+
+		attribute<AFWC_2017> AFWC_2017_rel      := point_in_polygon(geometry, AFWC_2017/geometry_rd);
+		attribute<string>    Corporatie         := AFWC_2017/Corporatie[AFWC_2017_rel];
+		attribute<float32>   kans_coropwoning   := MakeDefined(AFWC_2017/kans_coropwoning[AFWC_2017_rel], 0f);
+		attribute<string>    gemeente           := gemeenteCBS_met_bezit/GM_NAAM[point_in_polygon(geometry,gemeenteCBS_met_bezit/geometry)];
+
+		attribute<int32>     oppervlakte        := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/oppervlakte);
+		
+		attribute<uint8>     bijeenkomst        := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/bijeenkomst) ? 1b : 0b;
+		attribute<uint8>     cel                := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/cel)? 1b : 0b;
+		attribute<uint8>     gezondheidszorg    := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/gezondheidszorg)? 1b : 0b;
+		attribute<uint8>     industrie          := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/industrie)? 1b : 0b;
+		attribute<uint8>     kantoor            := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/kantoor)? 1b : 0b;
+		attribute<uint8>     logies             := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/logies)? 1b : 0b;
+		attribute<uint8>     onderwijs          := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/onderwijs)? 1b : 0b;
+		attribute<uint8>     overige_gebruiks   := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/overige_gebruiks)? 1b : 0b;
+		attribute<uint8>     sport              := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/sport)? 1b : 0b;
+		attribute<uint8>     winkel             := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/winkel)? 1b : 0b;
+		attribute<uint8>     woon               := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/woon)? 1b : 0b;
+		
+	}
+	unit<uint32> alle_BAG_adressen := Brondata/BAG/adres
+	,	DialogData      = "geometry"
+	,	DialogType      = "Map"
+	{
+		attribute<point_rd> geometry            := Brondata/BAG/adres/Geometry;
+		attribute<string>   nummeraanduiding_id := Brondata/BAG/adres/nummeraanduiding_id;
+		attribute<string>   straatnaam          := Brondata/BAG/adres/straatnaam;
+		attribute<string>   postcode            := Brondata/BAG/adres/postcode;
+		attribute<int32>    huisnummer          := Brondata/BAG/adres/huisnummer;
+		attribute<string>   huisletter          := Brondata/BAG/adres/huisletter;
+		attribute<string>   toevoeging          := Brondata/BAG/adres/toevoeging;
+		attribute<string>   woonplaatsnaam      := Brondata/BAG/adres/woonplaatsnaam;
+
+		attribute<string>   gemeente           := gemeenteCBS/GM_NAAM[point_in_polygon(geometry, gemeenteCBS/geometry)];
+
+//		attribute<AFWC_2017> AFWC_2017_rel      := point_in_polygon(geometry, AFWC_2017/geometry_rd);
+//		attribute<string>    Corporatie         := AFWC_2017/Corporatie[AFWC_2017_rel];
+//		attribute<float32>   kans_coropwoning   := MakeDefined(AFWC_2017/kans_coropwoning[AFWC_2017_rel], 0f);
+
+		attribute<int32>     oppervlakte        := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/oppervlakte);
+		attribute<uint8>     bijeenkomst        := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/bijeenkomst) ? 1b : 0b;
+		attribute<uint8>     cel                := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/cel)? 1b : 0b;
+		attribute<uint8>     gezondheidszorg    := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/gezondheidszorg)? 1b : 0b;
+		attribute<uint8>     industrie          := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/industrie)? 1b : 0b;
+		attribute<uint8>     kantoor            := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/kantoor)? 1b : 0b;
+		attribute<uint8>     logies             := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/logies)? 1b : 0b;
+		attribute<uint8>     onderwijs          := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/onderwijs)? 1b : 0b;
+		attribute<uint8>     overige_gebruiks   := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/overige_gebruiks)? 1b : 0b;
+		attribute<uint8>     sport              := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/sport)? 1b : 0b;
+		attribute<uint8>     winkel             := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/winkel)? 1b : 0b;
+		attribute<uint8>     woon               := rjoin(nummeraanduiding_id, Brondata/BAG/vbo_import/nummeraanduiding_id, Brondata/BAG/vbo_import/gebruiksdoelen/woon)? 1b : 0b;
+	}
+
+	unit<uint32> AFWC_2017
+	:	StorageName     = "%SourceDataDir%/Amsterdam/AFWC_2017.shp"
+	,	StorageType     = "gdal.vect"
+	,	StorageReadOnly = "True"
+	,	DialogData      = "geometry_rd"
+	,	DialogType      = "Map"
+	{
+		attribute<fpoint>      geometry    (polygon);
+		attribute<point_rd>    geometry_rd (polygon):= LatLongWgs842RD(geometry,point_rd);
+		attribute<gemeenteCBS> gemeenteCBS_rel      := point_in_polygon(centroid_or_mid(geometry_rd), gemeenteCBS/geometry);
+
+		attribute<uint32>      nr_bag_adressen      := sum(const(1,BAG_woonadressen_in_gemeenteCBS_met_bezit), BAG_woonadressen_in_gemeenteCBS_met_bezit/AFWC_2017_rel);
+		attribute<float32>     kans_coropwoning     := min_elem(float32(Aantal_cor) / float32(nr_bag_adressen), 1f);
+		
+		unit<uint32> corporatie_uq := unique(corporatie), DisableStorage = "True";
+	}
+}
