@@ -13,10 +13,12 @@
 
 container BAG
 {
-	parameter<string> snapshotdate := '20180701';
+//	parameter<string> snapshotdate := '20180701';
+	parameter<string> snapshotdate := '20230701';
+
 //	parameter<string> snapshotdir  := '%SourceDataDir%/BAG/snapshots.ext/AmsterdamAmstelveen/' + snapshotdate;
 //	parameter<string> snapshotdir  := '%SourceDataDir%/BAG/snapshots.ext/GrootNH/' + snapshotdate;
-	parameter<string> snapshotdir  := '%SourceDataDir%/BAG/snapshots.ext/' + snapshotdate;
+	parameter<string> snapshotdir  := 'D:/SourceData/BAG20/snapshots.ext/' + snapshotdate;
 
 	container impl
 	{
@@ -159,7 +161,7 @@ container BAG
 		attribute<string>          identificatie;
 
 		attribute<point_rd_mm>     geometry_mm    (poly);
-		attribute<point_rd>        geometry       (poly) := value(geometry_mm, point_rd);
+		attribute<point_rd>        geometry       (poly) := geometry_mm[point_rd];
 
 		attribute<eenheden/jaar>   bouwjaar;
 //		attribute<uint32>          nr_buurpanden;
@@ -191,7 +193,46 @@ container BAG
 		attribute<string> adres_range               := AsItemList(adres/uniquePCperPand/adres_range, adres/uniquePCperPand/pand_rel);
 		attribute<string> postcode                  := AsItemList(adres/uniquePCperPand/postcode, adres/uniquePCperPand/pand_rel);
 
+		container bbox
+		{
+			attribute<point_rd> lb (..) := lower_bound(geometry);
+			attribute<point_rd> ub (..) := upper_bound(geometry);
+			attribute<m> dx        (..) := pointCol(ub)[m] - pointCol(lb)[m];
+			attribute<m> dy        (..) := pointRow(ub)[m] - pointRow(lb)[m];
+
+			attribute<m> x_min     (..) := PointCol(lb)[m];
+			attribute<m> x_max     (..) := PointCol(ub)[m];
+			attribute<m> y_min     (..) := PointRow(lb)[m];
+			attribute<m> y_max     (..) := PointRow(ub)[m];
+		}
+		
+		/*attribute<point_rd>                   centroid              := point(bbox/x_min + 0.5f * bbox/dx, bbox/y_min + 0.5f * bbox/dy, point_rd); // de centroid_or_mid geeft incorrecte resultaten voor sommige geometrieen.
+
+		attribute<Geografie/blad_grid/domain> blad_grid_rel         := centroid[Geografie/blad_grid/domain];
+		attribute<Brondata/bag_blad>          blad_rel              := rlookup(blad_grid_rel, Brondata/bag_blad/values);
+		attribute<AHN4/blad>                  blad_src_rel          := point_in_polygon(centroid, Brondata/AHN4/blad/geometry);*/
 	}
+	unit<uint32> pand_met_woning := select_with_attr_by_cond(pand, pand/heeft_woningen)
+	{
+		container bbox
+		{
+			attribute<point_rd> lb (..) := lower_bound(geometry);
+			attribute<point_rd> ub (..) := upper_bound(geometry);
+			attribute<m> dx        (..) := pointCol(ub)[m] - pointCol(lb)[m];
+			attribute<m> dy        (..) := pointRow(ub)[m] - pointRow(lb)[m];
+
+			attribute<m> x_min     (..) := PointCol(lb)[m];
+			attribute<m> x_max     (..) := PointCol(ub)[m];
+			attribute<m> y_min     (..) := PointRow(lb)[m];
+			attribute<m> y_max     (..) := PointRow(ub)[m];
+		}
+		attribute<point_rd>                   centroid              := point(bbox/x_min + 0.5f * bbox/dx, bbox/y_min + 0.5f * bbox/dy, point_rd); // de centroid_or_mid geeft incorrecte resultaten voor sommige geometrieen.
+
+		attribute<Geografie/blad_grid/domain> blad_grid_rel         := centroid[Geografie/blad_grid/domain];
+		attribute<Brondata/bag_blad>          blad_rel              := rlookup(blad_grid_rel, Brondata/bag_blad/values);
+		attribute<AHN4/blad>                  blad_src_rel          := point_in_polygon(centroid, Brondata/AHN4/blad/geometry);
+	}
+
 
 	unit<uint32> adres
 	:	StorageName     = "= impl/adres_src_name"

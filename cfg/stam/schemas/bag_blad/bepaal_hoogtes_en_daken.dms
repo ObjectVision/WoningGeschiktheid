@@ -15,7 +15,7 @@ template bepaal_hoogtes_en_daken
 {
 	// begin case parameters
 	unit<uint32> pand_met_woning;
-	unit<spoint> GridDomain;
+	unit<ipoint> GridDomain;
 	attribute<cm_uint16> hoogte_ruw_offset (GridDomain);
 	attribute<cm_uint16> hoogte_int_offset (GridDomain);
 	// end case parameters
@@ -70,13 +70,13 @@ template bepaal_hoogtes_en_daken
 
 		container gradient
 		{
-			attribute<cm>           N                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) - point(0s, 1s, spoint)] - hoogtes_in_pand_met_woning[(idGrid)];
-			attribute<cm>           Z                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point(0s, 1s, spoint)] - hoogtes_in_pand_met_woning[(idGrid)];
-			attribute<cm>           O                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) - point(1s, 0s, spoint)] - hoogtes_in_pand_met_woning[(idGrid)];
-			attribute<cm>           W                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point(1s, 0s, spoint)] - hoogtes_in_pand_met_woning[(idGrid)];
+			attribute<cm>           N                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) - point(0i, 1i, ipoint)] - hoogtes_in_pand_met_woning[(idGrid)];
+			attribute<cm>           Z                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point(0i, 1i, ipoint)] - hoogtes_in_pand_met_woning[(idGrid)];
+			attribute<cm>           O                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) - point(1i, 0i, ipoint)] - hoogtes_in_pand_met_woning[(idGrid)];
+			attribute<cm>           W                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point(1i, 0i, ipoint)] - hoogtes_in_pand_met_woning[(idGrid)];
 
-			attribute<cm>           X                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) - point(1s, 0s, spoint)] - hoogtes_in_pand_met_woning[(idGrid) + point(1s, 0s, spoint)];
-			attribute<cm>           Y                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point(0s, 1s, spoint)] - hoogtes_in_pand_met_woning[(idGrid) - point(0s, 1s, spoint)];
+			attribute<cm>           X                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) - point(1i, 0i, ipoint)] - hoogtes_in_pand_met_woning[(idGrid) + point(1i, 0i, ipoint)];
+			attribute<cm>           Y                (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point(0i, 1i, ipoint)] - hoogtes_in_pand_met_woning[(idGrid) - point(0i, 1i, ipoint)];
 
 			attribute<cm>           amplitude        (GridDomain) := abs(N) + abs(Z) + abs(O) + abs(W);
 			attribute<cm>           amplitude_XY     (GridDomain) := abs(X) + abs(Y);
@@ -100,7 +100,7 @@ template bepaal_hoogtes_en_daken
 			);
 			//attribute<string> windstreek_label (GridDomain):= co/windstreek/label[windstreek_rel];
 
-			unit<uint32> test := Subset(isDefined(windstreek_rel) && isDefined(pand_met_woning_rel))
+			unit<uint64> test := Subset(isDefined(windstreek_rel) && isDefined(pand_met_woning_rel))
 			, DialogType = "Map"
 			, DialogData = "vector"
 			{
@@ -114,7 +114,7 @@ template bepaal_hoogtes_en_daken
 
 			// Deze vorm van clustering gaat niet werken omdat er geen goede breaks bepaald kunnen worden
 
-			container class
+			/*container class
 			{
 				unit<uint32> windstreek_amplitude_unique := unique(windstreek_amplitude)
 				{
@@ -127,10 +127,10 @@ template bepaal_hoogtes_en_daken
 				{
 					attribute<uint16> ClassBreaks := windstreek_amplitude_unique/values[nr_OrgEntity];
 				}
-			}
+			}*/
 		}
 
-		container kromming
+		/*container kromming
 		{
 			attribute<cm>   X               (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point( 1s, 0s,spoint)] + hoogtes_in_pand_met_woning[(idGrid) - point( 1s, 0s,spoint)] - 2f * hoogtes_in_pand_met_woning;
 			attribute<cm>   Y               (GridDomain) := hoogtes_in_pand_met_woning[(idGrid) + point( 0s, 1s,spoint)] + hoogtes_in_pand_met_woning[(idGrid) - point( 0s, 1s,spoint)] - 2f * hoogtes_in_pand_met_woning;
@@ -222,7 +222,7 @@ template bepaal_hoogtes_en_daken
 				attribute<cm>            dY                   := mean(plus_1m2_rel_points/dY, plus_1m2_rel_points/pand_met_woning_dakvlak_rel);
 
 			}
-		}
+		}*/
 	}
 	container liftschachten
 	{
@@ -239,7 +239,7 @@ template bepaal_hoogtes_en_daken
 //				attribute<float32> bouwlagen_vbo_quotient:= sum_vbo_oppervlaktes / footprint;
 //				attribute<uint8>   bouwlagen_vbo         := uint8(round(bouwlagen_vbo_quotient + 0.2f)); // 2.3 ronden we af naar 3 (soutterein ??)
 
-			attribute<bool>    is_meergezinspand     := Geschiktheid/pand_met_woning/is_Meergezins[nr_OrgEntity];
+			attribute<bool>    is_meergezinspand     := pand_met_woning/is_Meergezins;
 //				attribute<bool>    is_gebouwd_voor_2007  := bouwjaar > 1000[jaar] && bouwjaar < 2008[jaar];
 			
 			attribute<bool>    nr_bouwlagen_plus1    := bouwlagen_ahn > 1b;
@@ -274,11 +274,11 @@ template bepaal_hoogtes_en_daken
 			attribute<pand_met_woning_voor_liftbepaling> pand_met_woning_voor_liftbepaling_rel (GridDomain) := rlookup(pand_met_woning_rel, pand_met_woning_voor_liftbepaling/nr_OrgEntity);
 	
 			attribute<cm_uint16> hoogte_met_offset_pot                   (GridDomain) := 
-				(potential(  float32(AHN/ruw/hoogte_met_offset)          , Geografie/kernel_interpolate/distMatr) / 
-				 potential(isDefined(AHN/ruw/hoogte_met_offset) ? 1f : 0f, Geografie/kernel_interpolate/distMatr))
+				(potential(  float32(AHN/DSM/hoogte_met_offset)          , Geografie/kernel_interpolate/distMatr) / 
+				 potential(isDefined(AHN/DSM/hoogte_met_offset) ? 1f : 0f, Geografie/kernel_interpolate/distMatr))
 				[cm_uint16];
 
-			attribute<cm_uint16> hoogte_met_offset_interpolated          (GridDomain) := isNull(AHN/ruw/hoogte_met_offset)     ? hoogte_met_offset_pot          : AHN/ruw/hoogte_met_offset;
+			attribute<cm_uint16> hoogte_met_offset_interpolated          (GridDomain) := isNull(AHN/DSM/hoogte_met_offset)     ? hoogte_met_offset_pot          : AHN/DSM/hoogte_met_offset;
 			attribute<cm_uint16> ruw_hoogte_offset                       (GridDomain) := isDefined(pand_met_woning_voor_liftbepaling_rel) ? hoogte_met_offset_interpolated : 0[cm_uint16] / 0w;
 
 			attribute<cm_uint16> pand_met_woning_hoogte_offset_per_pand_met_woning             (pand_met_woning)       := rth_element(hoogte_ruw_offset, 0.7f, pand_met_woning_rel);

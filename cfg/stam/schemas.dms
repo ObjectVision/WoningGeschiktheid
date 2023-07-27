@@ -17,26 +17,26 @@ container schemas: Using = "Eenheden;Geografie"
 	template define_grid
 	{
 		// begin case parameters
+		unit<ipoint> gridset;
 		parameter<m> gridsizeX;
 		parameter<m> gridsizeY;
 		container bbox;
 		// end case parameters
 
-		parameter<int16> nr_cols := int16((bbox/x_max - bbox/x_min) / gridsizeX);
-		parameter<int16> nr_rows := int16((bbox/y_max - bbox/y_min) / gridsizeY);
+		parameter<int32> nr_cols := int32((bbox/x_max - bbox/x_min) / gridsizeX);
+		parameter<int32> nr_rows := int32((bbox/y_max - bbox/y_min) / gridsizeY);
 
-		unit<spoint> domain :=
+		 unit<ipoint> domain:=
 			range(
-				 gridset(
-					 point_rd
-					,point(float32(gridsizeX), float32(-gridsizeY), point_rd)
-					,point(bbox/x_min, bbox/y_max, point_rd)
-					,spoint
-				)
-				,point(0s, 0s)
-				,point(nr_cols,nr_rows)
-			)
-		,	DialogData = "point_rd";
+					gridset
+				   ,point(bbox/x_min, bbox/y_max, point_rd)[gridset]
+				   ,point(bbox/x_min, bbox/y_max, point_rd)[gridset] 
+				   + point(nr_cols, nr_rows, gridset)
+			  )
+		,	DialogData = "point_rd"
+		{
+			attribute<uint8> test:= const(1b,.);
+		}
 	}
 
 	// SECTIE Bepaal welke AHN2/3 bestanden aanwezig zijn.
@@ -56,17 +56,26 @@ container schemas: Using = "Eenheden;Geografie"
 	{
 		// begin case parameters
 		parameter<string> AHNSet;
-		container readdomain;
+		container blad;
 		// end case parameter
 
 		container per_blad :=
 			for_each_ne(
-				  readdomain/bag_blad/name
-				,'schemas/bag_blad/verwerk_blad (' + string(readdomain/bag_blad/values) + ',' + quote(readdomain/bag_blad/unit) + ')'
+				  blad/name
+				,'schemas/bag_blad/verwerk_blad (' + string(blad/values) + ',' + quote(blad/unit) + ')'
 			);
 
-		parameter<string> genetare_all      := 'Ready', ExplicitSuppliers = "= genetare_all_expr";
-		parameter<string> genetare_all_expr := AsList('per_blad/' + readdomain/bag_blad/name + '/export/Generate', ';');
+		container generate
+		{
+			container impl
+			{
+				 parameter<string> expr_list  := AsList('per_blad/' + blad/name + '/export/Generate', '+');
+				 parameter<string> expr_error := 'De lijst van te verwerken BAG pladen is niet compatibel met de huidige versie BAG en AHN. Activeer eerst item: /Brondata/Make_blad_ahn_with_bag_data/Generate en pas de conditie voor deze test aan.';
+			}
+			 parameter<string> all := = (Brondata/BAG/snapshotdate == '20230101' && Brondata/AHN4/AHN_version == 'AHN_4')
+				? impl/expr_list
+				: quote(impl/expr_error);
+		}
 	}
 
 	// Sectie lees AHN set vanuit verschillende BAG perspectieven

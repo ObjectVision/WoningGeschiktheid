@@ -55,7 +55,7 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 			attribute<Brondata/postcode_NH> postcode_NH_rel: = rlookup(pc6_org, Brondata/postcode_NH/Values);
 		}
 
-		unit<uint32> postcode_NH := Brondata/postcode_NH
+		/*unit<uint32> postcode_NH := Brondata/postcode_NH
 		,	StorageName = "%SourceDataDir%/WoonZorgWijzer/OngeschiktVastgoedPC6m300.fss"
 		{
 			attribute<string>      postcode            := Brondata/postcode_NH/Values;
@@ -86,7 +86,7 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 			attribute<float32>     percentage_ongeschikt;
 			attribute<float32>     percentage_aanpasbaar;
 			attribute<float32>     percentage_geschikt;
-		}
+		}*/
 
 		container pand_met_woning_export
 		{
@@ -342,7 +342,7 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 							, point(x_min, y_max, point_rd)
 						);
 						attribute<uint32> sequence := id(.) % #blad;
-						attribute<blad>   ordinal  := id(.) / #blad;
+						attribute<blad>   ordinal  := value(id(.) / #blad, blad);
 					}
 				}
 			}
@@ -475,29 +475,19 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 	*/
 	container AHNafleidingen
 	{
+		/*
 		container Genereer_AHN2_data_per_BAG_blad := schemas/verwerk_AHNSet('AHN2', Brondata/AHN/readDomainsAHN2);
 		container Genereer_AHN3_data_per_BAG_blad := schemas/verwerk_AHNSet('AHN3', Brondata/AHN/readDomainsAHN3);
 		
-		container merge_AHN2_data_per_BAG_blad := schemas/ahn_merge('AHN2', Brondata/AHN/readDomainsAHN2/bag_blad);
-		container merge_AHN3_data_per_BAG_blad := schemas/ahn_merge('AHN3', Brondata/AHN/readDomainsAHN3/bag_blad);
+		container merge_AHN2_data_per_BAG_blad := schemas/ahn_merge('AHN2', Brondata/AHN/readDomainsAHN2/bag_blad);*/
 		
-
+		container merge_AHN_data_per_BAG_blad := schemas/ahn_merge('AHN', Brondata/blad_ahn_with_bag_data );
+		
+		/*
 		unit<uint32> AHN2_inwinjaren : StorageName = "%SourceDataDir%/AHN/AHN_2/inwinjaren_AHN2_def.shp", StorageType = "gdal.vect", StorageReadOnly = "True";
 		unit<uint32> AHN3_inwinjaren : StorageName = "%SourceDataDir%/AHN/AHN_3/inwinjaren_AHN3_def.shp", StorageType = "gdal.vect", StorageReadOnly = "True";
-
-		unit<uint32> AHN2 : StorageName = "%LocalDataProjDir%/AHN2/pand_met_woning.fss", StorageReadOnly = "True"
-		{
-			attribute<string>    identificatie;
-			attribute<string>    identificatie_uq := unquote(identificatie), DisableStorage = "True";
-			attribute<cm_uint16> hoogte;
-			attribute<cm_uint16> hoogte_nok;
-			attribute<cm_uint16> hoogte_maaiveld_offset;
-			attribute<uint8>     bouwlagen_ahn;
-			attribute<float32>   perc_vlak;
-			attribute<bool>      heeftMogelijkLiftschacht;
-		}
-
-		unit<uint32> AHN3 : StorageName = "%LocalDataProjDir%/AHN3/pand_met_woning.fss", StorageReadOnly = "True"
+		*/
+		unit<uint32> AHN : StorageName = "%LocalDataProjDir%/AHN/pand_met_woning.fss", StorageReadOnly = "True"
 		,	DialogType = "Map"
 		,	DialogData = "geometry"
 		{
@@ -512,35 +502,21 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 			
 			attribute<point_rd> geometry (poly):= rjoin(identificatie_uq,BAG/pand/identificatie, BAG/pand/geometry);
 		}
-		
+
+		container Genereer_AHN_data_per_BAG_blad := schemas/verwerk_AHNSet('AHN', brondata/blad_ahn_with_bag_data);
+
 		unit<uint32> pand := BAG/pand
 		{
-			attribute<bool> heeft_AHN3_data := isDefined(rjoin(BAG/pand/identificatie, AHN3/identificatie_uq, AHN3/hoogte));
+			attribute<bool> heeft_AHN_data := isDefined(rjoin(BAG/pand/identificatie, AHN/identificatie_uq, AHN/hoogte));
 
-			attribute<jaar> inwinjaar := heeft_AHN3_data
-					? value(AHN3_inwinjaren/jaar[point_in_polygon(centroid_or_mid(BAG/pand/Geometry), AHN3_inwinjaren/Geometry[point_rd])], jaar)
-					: value(AHN2_inwinjaren/inwinjaar[point_in_polygon(centroid_or_mid(BAG/pand/Geometry), AHN2_inwinjaren/Geometry[point_rd])], jaar);
-
-			attribute<verdieping> nr_bouwlagen_AHN := heeft_AHN3_data
-					? rjoin(BAG/pand/identificatie, AHN3/identificatie_uq, AHN3/bouwlagen_ahn)
-					: rjoin(BAG/pand/identificatie, AHN2/identificatie_uq, AHN2/bouwlagen_ahn)
-				[verdieping];
-
-			attribute<bool> heeftMogelijkLiftschacht := heeft_AHN3_data
-				? rjoin(BAG/pand/identificatie, AHN3/identificatie_uq, AHN3/heeftMogelijkLiftschacht)
-				: rjoin(BAG/pand/identificatie, AHN2/identificatie_uq, AHN2/heeftMogelijkLiftschacht);
-
-			attribute<ratio> perc_vlak := heeft_AHN3_data
-					? rjoin(BAG/pand/identificatie, AHN3/identificatie_uq, AHN3/perc_vlak)
-					: rjoin(BAG/pand/identificatie, AHN2/identificatie_uq, AHN2/perc_vlak)
-				[ratio];
-
-			attribute<cm_uint16> hoogte := heeft_AHN3_data
-				? rjoin(BAG/pand/identificatie, AHN3/identificatie_uq, AHN3/hoogte)
-				: rjoin(BAG/pand/identificatie, AHN2/identificatie_uq, AHN2/hoogte);
+			attribute<jaar>       inwinjaar                := value(Brondata/AHN4/inwinjaren_AHN/totaal/inwinjaar[point_in_polygon(centroid_or_mid(BAG/pand/Geometry), Brondata/AHN4/inwinjaren_AHN/totaal/geometry[point_rd])], jaar);
+			attribute<verdieping> nr_bouwlagen_AHN         := rjoin(BAG/pand/identificatie, AHN/identificatie_uq, AHN/bouwlagen_ahn)[verdieping];
+			attribute<bool>       heeftMogelijkLiftschacht := rjoin(BAG/pand/identificatie, AHN/identificatie_uq, AHN/heeftMogelijkLiftschacht);
+			attribute<ratio>      perc_vlak                := rjoin(BAG/pand/identificatie, AHN/identificatie_uq, AHN/perc_vlak);
+			attribute<cm_uint16>  hoogte                   := rjoin(BAG/pand/identificatie, AHN/identificatie_uq, AHN/hoogte);
 		}
 	}
-	#include<CorporatieBezitAmsterdam.dms>
+	//#include<CorporatieBezitAmsterdam.dms>
 	container herlinzen
 	{
 		unit<uint32> SrcFileName

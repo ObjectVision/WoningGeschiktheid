@@ -16,7 +16,7 @@ container bag_blad
 	template verwerk_blad
 	{
 		// begin case parameters
-		parameter<Analyses/Geschiktheid/pand_met_woning/impl/blad> blad_rel;
+		parameter<Brondata/bag_blad> blad_rel;
 		parameter<string> unit;
 		// end case parameters
 
@@ -40,21 +40,8 @@ container bag_blad
 			}
 		}
 
-		unit<uint32> pand_met_woning := Subset(Analyses/Geschiktheid/pand_met_woning/impl/blad_rel == blad_rel)
-		,	DialogType = "Map"
-		,	DialogData = "geometry"
+		unit<uint32> pand_met_woning := select_with_attr_by_cond(Brondata/BAG/pand_met_woning, Brondata/BAG/pand_met_woning/blad_rel == blad_rel)
 		{
-			attribute<Geografie/point_rd> geometry (polygon) := Analyses/Geschiktheid/pand_met_woning/geometry[nr_OrgEntity]
-			{
-				parameter<int16>  PenWidth      := 0s          , DialogType = "PenWidth";
-				parameter<mm>     PenWorldWidth := 0.1[mm]     , DialogType = "PenWorldWidth";
-				parameter<uint32> BrushColor    := rgb(200,0,0), DialogType = "BrushColor";
-				parameter<uint32> PenColor      := rgb( 80,0,0), DialogType = "PenColor";
-			}
-
-			attribute<string>    identificatie           := Analyses/Geschiktheid/pand_met_woning/identificatie[nr_OrgEntity];
-			attribute<jaar>      bouwjaar                := Analyses/Geschiktheid/pand_met_woning/bouwjaar[nr_OrgEntity];
-
 			attribute<uint32>    nr_cellen_vlak          := sum(hoogtes_en_daken/dak/gradient/stijlheid_rel == cl/stijlheid/V/vlak ? 1 : 0, hoogtes_en_daken/pand_met_woning_rel);
 			attribute<uint32>    nr_cellen_met_stijlheid := sum(isDefined(hoogtes_en_daken/dak/gradient/stijlheid_rel)             ? 1 : 0, hoogtes_en_daken/pand_met_woning_rel);
 
@@ -88,28 +75,26 @@ container bag_blad
 						, point(x_min, y_max, point_rd)
 					);
 				}
-				container Grid := Schemas/define_grid(0.5[m], 0.5[m], vlak);
+				container Grid := Schemas/define_grid(ahn_tiles_gridset, 0.5[m], 0.5[m], vlak);
 			}
 
-			unit<uint32> bladen := Subset(readdomain/overlay/first_rel == blad_rel)
-			{
-				attribute<string> AHN_unit := readdomain/overlay/AHN_UNIT[nr_OrgEntity];
-			}
+			unit<uint32> bladen := Select_many(overlay_ahn_with_bag_data, overlay_ahn_with_bag_data/first_rel == blad_rel);
 
-			container int := merge_AHN_bladen(vlak/Grid/domain, 'int');
-			container ruw := merge_AHN_bladen(vlak/Grid/domain, 'ruw');
+			container DSM := merge_AHN_bladen(vlak/Grid/domain, 'DSM');
+			container DTM := merge_AHN_bladen(vlak/Grid/domain, 'DTM');
 		}
-		container hoogtes_en_daken := bepaal_hoogtes_en_daken(pand_met_woning, AHN/vlak/Grid/domain, AHN/ruw/hoogte_met_offset, AHN/int/hoogte_met_offset);
+
+		container hoogtes_en_daken := bepaal_hoogtes_en_daken(pand_met_woning, AHN/vlak/Grid/domain, AHN/DSM/hoogte_met_offset, AHN/DTM/hoogte_met_offset);
 	}
 
 	template merge_AHN_bladen
 	{
 		// begin case parameters
-		unit<spoint> GridDomain;
+		unit<ipoint> GridDomain;
 		parameter<string> type;
 		// end case parameters
 
-		parameter<string> blad_list_expr := asList('Brondata/AHN/'+ AHNSET + '/per_blad/blad_' + bladen/AHN_unit   + '/' + type +'/Grid/BAGPerspectieven/blad_' + UNIT, ',');
+		parameter<string> blad_list_expr := asList('Brondata/AHN4/BAG_Perspectieven/per_blad/blad_' + bladen/AHN_unit   + '/' + type +'/Grid/files/blad_' + UNIT, ',');
 
 		attribute<cm_uint16> hoogte_met_offset (GridDomain) := ='raster_merge(
 			 GridDomain 
@@ -124,7 +109,7 @@ container bag_blad
 	{
 		// begin template parameters
 		unit<uint32>    pand_met_woning;
-		unit<spoint>    GridDomain;
+		unit<ipoint>    GridDomain;
 		parameter<bool> isMax;
 		// end template parameters
 
@@ -139,7 +124,7 @@ container bag_blad
 
 		attribute<pand_met_woning> buffer (GridDomain) := isDefined(pand_met_woning_rel) ? (0 / 0)[pand_met_woning] : pand_met_woning_met_buffer;
 
-		unit<uint32> buffer_points := Subset(isDefined(buffer) && isDefined(hoogte_int_offset))
+		unit<uint64> buffer_points := Subset(isDefined(buffer) && isDefined(hoogte_int_offset))
 		,	DialogType = "Map"
 		,	DialogData = "point"
 		{

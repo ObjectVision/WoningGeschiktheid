@@ -36,15 +36,31 @@ container Geografie: Using = "Eenheden;Klassificaties"
 			, ipoint
 		);
 
+	unit<ipoint> ahn_blok_gridset  := 
+		gridset(
+			 point_rd
+			,point(5000m, -6250m, point_rd)
+			,point(0f, 0f, point_rd)
+			,ipoint
+		);
+
+	unit<ipoint> ahn_tiles_gridset  := 
+		gridset(
+			 point_rd
+			,point(0.5m, -0.5m, point_rd)
+			,point(0f, 0f, point_rd)
+			,ipoint
+		);
+
 	container blad_bbox
 	{
-		attribute<point_rd> lowerbound (Brondata/AHN/blad) := lower_bound(Brondata/AHN/blad/geometry);
-		attribute<point_rd> upperbound (Brondata/AHN/blad) := upper_bound(Brondata/AHN/blad/geometry);
+		attribute<point_rd> lowerbound (Brondata/AHN4/blad) := lower_bound(Brondata/AHN4/blad/geometry);
+		attribute<point_rd> upperbound (Brondata/AHN4/blad) := upper_bound(Brondata/AHN4/blad/geometry);
 
-		attribute<m>        x_min_att  (Brondata/AHN/blad) := PointCol(lowerbound)[m];
-		attribute<m>        x_max_att  (Brondata/AHN/blad) := PointCol(upperbound)[m];
-		attribute<m>        y_min_att  (Brondata/AHN/blad) := PointRow(lowerbound)[m];
-		attribute<m>        y_max_att  (Brondata/AHN/blad) := PointRow(upperbound)[m];
+		attribute<m>        x_min_att  (Brondata/AHN4/blad) := PointCol(lowerbound)[m];
+		attribute<m>        x_max_att  (Brondata/AHN4/blad) := PointCol(upperbound)[m];
+		attribute<m>        y_min_att  (Brondata/AHN4/blad) := PointRow(lowerbound)[m];
+		attribute<m>        y_max_att  (Brondata/AHN4/blad) := PointRow(upperbound)[m];
 
 		parameter<m>        x_min      := min(x_min_att);
 		parameter<m>        x_max      := max(x_max_att);
@@ -52,10 +68,10 @@ container Geografie: Using = "Eenheden;Klassificaties"
 		parameter<m>        y_max      := max(y_max_att);
 	}
 
-	container blad_grid := schemas/define_grid(5000[m], 6250[m], blad_bbox)
+	container blad_grid := schemas/define_grid(ahn_blok_gridset, 5000[m], 6250[m], blad_bbox)
 	{
-		attribute<string> unit (domain) := first(Brondata/AHN/blad/unit, Brondata/AHN/blad/blad_grid_rel);
-		attribute<string> name (domain) := first(Brondata/AHN/blad/name, Brondata/AHN/blad/blad_grid_rel);
+		attribute<string> unit (domain) := first(Brondata/AHN4/blad/unit, Brondata/AHN4/blad/blad_grid_rel);
+		attribute<string> name (domain) := first(Brondata/AHN4/blad/name, Brondata/AHN4/blad/blad_grid_rel);
 	}
 
 	// voor buffer points bepaling

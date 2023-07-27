@@ -9,8 +9,125 @@
 //                                                                                                  //
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-container AHN
+container AHN4
 {
+// bij nieuwe AHN of toevoegingen aan AHN, maak eerst bestand: %AHNDrive%/AHN4/dir_list.txt opnieuw aan met commando: dir /S /B > dir_list.txt in de %AHNDrive%/AHN4_cm folder
+
+	parameter<string> AHN_version:= 'AHN_4';
+
+	unit<uint32> blad_alle:
+		StorageName     = "='%AHNDrive%/' + AHN_version + '_cm/ahn_units.shp'"
+	,	StorageType     = "gdal.vect"
+	,	StorageReadOnly = "True"
+	,	KeepData        = "True"
+	{
+		attribute<point_rd> geometry (poly);
+		attribute<string>   unit;
+		attribute<bool>     IsIncorrect10dz2 := id(.) == 1403;
+		attribute<bool>     HeeftAHN4data    := isDefined(rlookup(lowercase(unit), lowercase(blad_files/with_data/values)));
+		attribute<bool>     conditie         := HeeftAHN4data && !IsIncorrect10dz2;
+	}
+
+	parameter<string> blad_files:
+		StorageName     = "='%AHNDrive%/' + AHN_version + '_cm/dir_list.txt'"
+	,	StorageType     = "str"
+	,	StorageReadOnly = "True"
+	,	KeepData        = "True"
+	{
+		parameter<uint32> nr_rows := strcount(blad_files, '\n');
+		unit<uint32> all := range(uint32,0,nr_rows)
+		{
+			parameter<string> Header         := ReadLines(blad_files, void, 0);
+			attribute<string> BodyRows (all) := ReadLines(blad_files, all, Header/ReadPos);
+		}
+		unit<uint32> tiff := select_orgrel(strcount(all/BodyRows,'.tif') > 0)
+		{
+			attribute<string> pathname          := all/BodyRows[org_rel];
+			attribute<uint32> startpos_filename := strrpos(pathname, '\\') + 1;
+			attribute<string> filename          := substr(pathname, startpos_filename);
+			attribute<string> bladname          := replace(filename, '.tif', '');
+		}
+		unit<uint32> blad_unique := unique(tiff/bladname)
+		{
+			attribute<uint32> count := pcount(rlookup(tiff/bladname, values));
+		}
+		unit<uint32> with_data := select_many(blad_unique, blad_unique/count == 2);
+	}
+
+	unit<uint32> blad := select_many(blad_alle, blad_alle/conditie) 
+	{
+		attribute<ipoint>   geometry_ipol (poly) := ipolygon(geometry);
+		attribute<string>   name                 := 'blad_' + unit;
+		attribute<Geografie/blad_grid/domain> blad_grid_rel := centroid(geometry)[Geografie/blad_grid/domain];
+
+		attribute<string> int_filename := expand(., '%AHNDrive%') + '/AHN_4_cm/DTM/' + unit + '.tif';
+		attribute<string> ruw_filename := replace(int_filename, 'DTM', 'DSM');
+
+		/*attribute<jaar>   inwinjaar         := rjoin(id(.), inwinjaren/intersect_AHN/first_rel, inwinjaren/intersect_AHN/inwinjaar_AHN);
+
+
+		container inwinjaren
+		{
+			unit<uint32> intersect_AHN := overlay_polygon(ipolygon(blad/geometry), ipolygon(inwinjaren_AHN/geometry))
+			{
+				attribute<jaar> inwinjaar_AHN := inwinjaren_AHN/inwinjaar_AH4[second_rel];
+			}
+		}*/
+	}
+
+	container inwinjaren_AHN
+	{
+		unit<uint32> P1_RegioWest2020_v2: StorageName = "D:/SourceData/AHN/AHN4/inwinjaren/P1_RegioWest2020_v2"
+		, StorageType = "gdal.vect"
+		, StorageReadOnly = "True";
+
+		unit<uint32> P2_RegioNoord2020_v2: StorageName = "D:/SourceData/AHN/AHN4/inwinjaren/P2_RegioNoord2020_v2"
+		, StorageType = "gdal.vect"
+		, StorageReadOnly = "True";
+
+		unit<uint32> P2_RegioOost2022_v2: StorageName = "D:/SourceData/AHN/AHN4/inwinjaren/P2_RegioOost2022_v2"
+		, StorageType = "gdal.vect"
+		, StorageReadOnly = "True";
+
+		unit<uint32> P2_RegioZuid2021_v2: StorageName = "D:/SourceData/AHN/AHN4/inwinjaren/P2_RegioZuid2021_v2"
+		, StorageType = "gdal.vect"
+		, StorageReadOnly = "True";
+
+		unit<uint32> P2_RegioZuidWest2020_v2: StorageName = "D:/SourceData/AHN/AHN4/inwinjaren/P2_RegioZuidWest2020_v2"
+		, StorageType = "gdal.vect"
+		, StorageReadOnly = "True";
+
+		unit<uint32> yr2020 := union_unit(P1_RegioWest2020_v2,P2_RegioNoord2020_v2,P2_RegioZuidWest2020_v2)
+		{
+			attribute<point_rd> geometry (poly) := union_data(., P1_RegioWest2020_v2/geometry, P2_RegioNoord2020_v2/geometry, P2_RegioZuidWest2020_v2/geometry)[point_rd];
+		}
+		unit<uint32> yr2021 := P2_RegioZuid2021_v2
+		{
+			attribute<point_rd> geometry (poly) := P2_RegioZuid2021_v2/geometry[point_rd];
+		}
+		unit<uint32> yr2022 := P2_RegioOost2022_v2
+		{
+			attribute<point_rd> geometry (poly) := P2_RegioOost2022_v2/geometry[point_rd];
+		}
+		unit<uint32> totaal := union_unit(yr2020, yr2021, yr2022)
+		{
+			attribute<point_rd> geometry (poly) := union_data(., yr2020/geometry, yr2021/geometry, yr2022/geometry);
+			attribute<uint16>   inwinjaar       := union_data(., const(uint16(2020),yr2020), const(uint16(2021),yr2021), const(uint16(2022),yr2022));
+		}
+	}
+	container BAG_perspectieven
+	{
+		unit<uint32> blad := unique(overlay_ahn_with_bag_data/second_rel), label = "unieke AHN bladen met BAG data"
+		{
+			attribute<string> name := brondata/AHN4/blad/name[values];
+		}
+
+		container per_blad := for_each_ne(
+			 blad/name
+			,'Schemas/ahn_set_to_BAG_perspectieven/bepaal_BAG_perspectief_griddomeinen_en_lees_data_per_blad(brondata/AHN4/blad,' + string(blad/values) + ')'
+		);
+	}
+	/*
 	unit<uint32> blad_src:
 		StorageName     = "%SourceDataDir%/AHN/ahn_units.shp"
 	,	StorageType     = "gdal.vect"
@@ -179,13 +296,13 @@ container AHN
 					attribute<string> blad_ruw := gedownload_voor_2018/blad[nr_OrgEntity];
 					attribute<string> unit := replace(replace(blad_ruw, 'C:\\sourcedata\\AHN_3_cm_2017\\r',''),'\\','','.tif','');
 				}
-			}*/
+			}
 			unit<uint32> gedownload_voor_2018: nrofrows = 509
 			{
 				attribute<string> unit :
 					['01cz1','01cz2','01dz1','01dz2','01gn1','01gn2','01gz1','01gz2','01hn1','01hn2','01hz1','01hz2','02cn1','02cn2','02cz1','02cz2','02dn1','02dz1','02dz2','02ez1','02ez2','02fz1','02fz2','02gn1','02gn2','02gz1','02gz2','02hn1','02hn2','03az1','04dn2','04dz2','04ez2','04fn2','04fz1','04fz2','04gn1','04gn2','04gz1','05an1','05an2','05bn1','05dn2','05dz2','05ez2','05fn1','05fn2','05fz1','05fz2','05gn1','05gn2','05gz1','05gz2','05hn1','05hn2','05hz1','05hz2','06an1','06an2','06az1','06az2','06bn1','06bn2','06bz1','06bz2','06cn1','06cn2','06cz1','06cz2','06dn1','06dn2','06dz1','06dz2','06en1','06en2','06ez1','06ez2','06fn1','06fn2','06fz1','06fz2','06gn1','06gn2','06gz1','06gz2','06hn1','06hn2','06hz1','06hz2','09hn2','09hz1','09hz2','10az2','10bn1','10bn2','10bz1','10bz2','10cn1','10cn2','10dn1','10dn2','10dz2','10en1','10en2','10ez1','10ez2','10fn1','10fn2','10fz1','10fz2','10gz2','10hn1','10hn2','10hz1','10hz2','11an1','11an2','11az1','11az2','11bn1','11bn2','11bz1','11bz2','11cn1','11cn2','11cz1','11cz2','11dn1','11dn2','11dz1','11dz2','11en1','11en2','11ez1','11ez2','11fn1','11fn2','11fz1','11fz2','11gn1','11gn2','11gz1','11gz2','11hn1','11hn2','11hz1','11hz2','12az1','12cn1','12cz1','14fn1','15bn1','15bn2','15bz1','15bz2','15en1','15en2','15ez1','15ez2','15fn1','15fn2','15fz1','15fz2','16an1','16an2','16az1','16az2','16bn1','16bn2','16bz1','16bz2','16cn1','16cn2','16dn1','16dn2','16en1','16en2','16ez1','16ez2','16fn1','16fn2','17an1','24fn2','24fz2','24hn1','24hn2','24hz1','24hz2','25an1','25an2','25az1','25az2','25bn1','25bn2','25bz1','25bz2','25cn1','25cn2','25cz1','25cz2','25dn1','25dn2','25dz1','25dz2','25ez1','25ez2','25gn1','25gn2','25gz1','25gz2','25hn1','25hn2','25hz1','25hz2','26cz1','26cz2','26dz1','30dn2','30dz1','30dz2','30en2','30ez1','30ez2','30fn1','30fn2','30fz1','30fz2','30gn1','30gn2','30gz1','30gz2','30hn1','30hn2','30hz1','30hz2','31an1','31an2','31az1','31az2','31bn1','31bn2','31bz1','31bz2','31cn1','31cn2','31cz1','31cz2','31dn1','31dn2','31dz1','31dz2','31en1','31en2','31ez1','31ez2','31fn1','31fn2','31fz1','31fz2','31gn1','31gn2','31gz1','31gz2','31hn1','31hn2','31hz1','31hz2','32an1','32an2','32az1','32cn1','32cn2','32cz1','32cz2','32dn1','32dz1','37an1','37an2','37az2','37bn1','37bn2','37bz1','37bz2','37dn2','37en1','37en2','37ez1','37ez2','37fn1','37fn2','37fz1','37fz2','37gn1','37gn2','37hn1','37hn2','38an1','38an2','38az1','38az2','38bn1','38bn2','38bz1','38bz2','38cn1','38cn2','38cz1','38cz2','38dn1','38dn2','38dz1','38dz2','38en1','38en2','38ez1','38ez2','38fn1','38fn2','38fz1','38fz2','38gn1','38gn2','38gz1','38gz2','38hn1','38hn2','38hz1','38hz2','39an1','39an2','39az1','39az2','39bn1','39bn2','39bz1','39bz2','39cn1','39cn2','39cz1','39cz2','39dn1','39dn2','39dz1','39dz2','39en1','39en2','39ez1','39ez2','39fz1','39fz2','39gn1','39gn2','39gz1','39gz2','39hn1','39hn2','39hz1','39hz2','40an2','40az1','40az2','40bz1','40bz2','40cn1','40cn2','40cz1','40cz2','40dn1','40dn2','40dz1','40dz2','40gn1','40gz1','43az1','43cn1','43cn2','43cz1','43cz2','43dn1','43dz1','43dz2','44az2','44bn1','44bn2','44bz1','44bz2','44en1','44en2','44ez1','44ez2','44fn1','44fn2','44fz1','44fz2','45an1','45an2','45az1','45az2','45bn1','45bn2','45bz1','45en1','45fn1','45fn2','46an1','46an2','46az1','46bn1','46bn2','46bz1','46bz2','49an1','49an2','49az1','49az2','49bn1','49bn2','49bz1','49cn1','49cn2','49cz1','49cz2','49dn1','49dn2','49dz1','49dz2','55an1','55an2','55az1','55az2','55bn1','55bz1','55cn1','64dn2','64dz2','64gn1','64gn2','64gz1','64gz2','64hn1','64hn2','64hz1','64hz2','65an2','65az1','65az2','65bn1','65bn2','65bz1','65bz2','65cn1','65cn2','65cz1','65cz2','65dn1','65dn2','65dz1','65dz2','65en1','65en2','65ez1','65ez2','65fn1','65fn2','65fz1','65fz2','65gn1','65gn2','65gz1','65gz2','65hn1','65hn2','65hz1','65hz2','66fn1','66fn2','66fz1','66fz2','66hn1','66hn2','67an1','67an2','67az1','67az2','67bn1','67bn2','67bz1','67bz2','67cn1','67cn2','67dn1','67dn2','67en1','67en2','67ez1','67ez2','67fn1','67fn2','67fz1','67fz2','67gn1','67gn2','67gz1','67gz2','67hn1','67hn2','67hz1','67hz2','70fz2'];
 			}
-			/*
+			
 			unit<uint32> gedownload_in_2018:
 				StorageName     = "C:/sourcedata/AHN_3_cm/ahn3_2018.csv"
 			,	StorageType     = "gdal.vect"
@@ -196,12 +313,12 @@ container AHN
 					attribute<string> blad_ruw := gedownload_in_2018/blad[nr_OrgEntity];
 					attribute<string> unit := replace(replace(blad_ruw, 'C:\\sourcedata\\AHN_3_cm\\r',''),'\\','','.tif','');
 				}
-			}*/
+			}
 			unit<uint32> gedownload_in_2018: nrofrows = 761
 			{
 				attribute<string> unit :
 					['01cz1','01cz2','01dz1','01dz2','01gn1','01gn2','01gz1','01gz2','01hn1','01hn2','01hz1','01hz2','02cn1','02cn2','02cz1','02cz2','02dn1','02dz1','02dz2','02ez1','02ez2','02fz1','02fz2','02gn1','02gn2','02gz1','02gz2','02hn1','02hn2','03az1','04dn2','04dz2','04ez2','04fn2','04fz1','04fz2','04gn1','04gn2','04gz1','05an1','05an2','05bn1','05dn2','05dz2','05ez2','05fn1','05fn2','05fz1','05fz2','05gn1','05gn2','05gz1','05gz2','05hn1','05hn2','05hz1','05hz2','06an1','06an2','06az1','06az2','06bn1','06bn2','06bz1','06bz2','06cn1','06cn2','06cz1','06cz2','06dn1','06dn2','06dz1','06dz2','06en1','06en2','06ez1','06ez2','06fn1','06fn2','06fz1','06fz2','06gn1','06gn2','06gz1','06gz2','06hn1','06hn2','06hz1','06hz2','09az2','09bn1','09bn2','09bz1','09bz2','09cn2','09cz2','09dn1','09dn2','09dz1','09dz2','09en1','09ez1','09hn2','09hz1','09hz2','10az2','10bn1','10bn2','10bz1','10bz2','10cn1','10cn2','10dn1','10dn2','10dz2','10en1','10en2','10ez1','10ez2','10fn1','10fn2','10fz1','10fz2','10gn1','10gn2','10gz1','10gz2','10hn1','10hn2','10hz1','10hz2','11an1','11an2','11az1','11az2','11bn1','11bn2','11bz1','11bz2','11cn1','11cn2','11cz1','11cz2','11dn1','11dn2','11dz1','11dz2','11en1','11en2','11ez1','11ez2','11fn1','11fn2','11fz1','11fz2','11gn1','11gn2','11gz1','11gz2','11hn1','11hn2','11hz1','11hz2','12az1','12cn1','12cn2','12cz1','12cz2','12dn1','12dz1','14an2','14az2','14bn1','14bn2','14bz1','14bz2','14cn2','14cz1','14cz2','14dn1','14dn2','14dz1','14dz2','14en1','14en2','14ez1','14ez2','14fn1','14fz1','14fz2','14gn1','14gn2','14gz1','14gz2','14hn1','14hn2','14hz1','14hz2','15bn1','15bn2','15bz1','15bz2','15cz1','15cz2','15en1','15en2','15ez1','15ez2','15fn1','15fn2','15fz1','15fz2','15gn2','15gz2','15hn1','15hn2','15hz1','15hz2','16an1','16an2','16az1','16az2','16bn1','16bn2','16bz1','16bz2','16cn1','16cn2','16cz1','16cz2','16dn1','16dn2','16dz1','16dz2','16en1','16en2','16ez1','16ez2','16fn1','16fn2','16fz1','16fz2','16gn1','16gn2','16gz1','16gz2','16hn1','16hn2','16hz1','16hz2','17an1','17an2','17az1','17az2','17bn1','17bn2','17bz1','17bz2','17cn1','17cn2','17cz1','17cz2','17dn1','17dn2','17dz1','17dz2','17en1','17en2','17ez1','17ez2','17gn1','19an1','19an2','19az1','19az2','19bn1','19bn2','19bz1','19bz2','19cn1','19cn2','19cz1','19cz2','19dn1','19dn2','19dz1','19dz2','19en1','19en2','19ez1','19ez2','19fn1','19fn2','19fz1','19fz2','19gn1','19gn2','19gz1','19gz2','19hn1','19hz1','19hz2','20an1','20an2','20az1','20bn1','20bn2','20bz1','20bz2','20dn2','20dz1','20dz2','20en2','20ez2','20fn1','20fn2','20fz1','20fz2','20gn1','20gn2','20gz1','20gz2','20hn1','20hn2','20hz1','20hz2','21an1','21an2','21az1','21az2','21bn1','21bn2','21bz1','21bz2','21cn1','21cn2','21cz1','21cz2','21dn1','21dn2','21dz1','21dz2','21en1','21en2','21ez1','21ez2','21fn1','21fn2','21fz1','21fz2','21gn1','21gn2','21gz1','21gz2','21hn1','21hn2','21hz1','21hz2','22an1','22an2','22az1','22az2','22bn1','22bn2','22bz1','22cn1','22cn2','22cz1','24fn2','24fz2','24hn1','24hn2','24hz1','24hz2','25an1','25an2','25az1','25az2','25bn1','25bn2','25bz1','25bz2','25cn1','25cn2','25cz1','25cz2','25dn1','25dn2','25dz1','25dz2','25en1','25en2','25ez1','25ez2','25fn1','25fn2','25fz1','25fz2','25gn1','25gn2','25gz1','25gz2','25hn1','25hn2','25hz1','25hz2','26an2','26az1','26az2','26bn1','26bn2','26bz1','26bz2','26cn1','26cn2','26cz1','26cz2','26dn1','26dn2','26dz1','26dz2','26en1','26en2','26ez1','26ez2','26fn1','26fn2','26fz1','26fz2','26gn1','26gn2','26gz1','26gz2','26hn1','27an1','27an2','27az1','27bn1','27bn2','27en1','27en2','27ez1','27ez2','27fn1','27fn2','27fz1','27fz2','27gn1','27gn2','27gz1','27gz2','27hn1','27hn2','27hz1','27hz2','28an1','28an2','28az1','28az2','28cn1','28cn2','28cz1','28cz2','30dn2','30dz1','30dz2','30en2','30ez1','30ez2','30fn1','30fn2','30fz1','30fz2','30gn1','30gn2','30gz1','30gz2','30hn1','30hn2','30hz1','30hz2','31an1','31an2','31az1','31az2','31bn1','31bn2','31bz1','31bz2','31cn1','31cn2','31cz1','31cz2','31dn1','31dn2','31dz1','31dz2','31en1','31en2','31ez1','31ez2','31fn1','31fn2','31fz1','31fz2','31gn1','31gn2','31gz1','31gz2','31hn1','31hn2','31hz1','31hz2','32an1','32an2','32az1','32bn1','32bn2','32cn1','32cn2','32cz1','32cz2','32dn1','32dz1','32en1','33en2','33fn1','33fn2','37an1','37an2','37az2','37bn1','37bn2','37bz1','37bz2','37dn2','37en1','37en2','37ez1','37ez2','37fn1','37fn2','37fz1','37fz2','37gn1','37gn2','37hn1','37hn2','38an1','38an2','38az1','38az2','38bn1','38bn2','38bz1','38bz2','38cn1','38cn2','38cz1','38cz2','38dn1','38dn2','38dz1','38dz2','38en1','38en2','38ez1','38ez2','38fn1','38fn2','38fz1','38fz2','38gn1','38gn2','38gz1','38gz2','38hn1','38hn2','38hz1','38hz2','39an1','39an2','39az1','39az2','39bn1','39bn2','39bz1','39bz2','39cn1','39cn2','39cz1','39cz2','39dn1','39dn2','39dz1','39dz2','39en1','39en2','39ez1','39ez2','39fz1','39fz2','39gn1','39gn2','39gz1','39gz2','39hn1','39hn2','39hz1','39hz2','40an2','40az1','40az2','40bz1','40bz2','40cn1','40cn2','40cz1','40cz2','40dn1','40dn2','40dz1','40dz2','40gn1','40gz1','43az1','43cn1','43cn2','43cz1','43cz2','43dn1','43dz1','43dz2','44az2','44bn1','44bn2','44bz1','44bz2','44en1','44en2','44ez1','44ez2','44fn1','44fn2','44fz1','44fz2','45an1','45an2','45az1','45az2','45bn1','45bn2','45bz1','45en1','45fn1','45fn2','46an1','46an2','46az1','46bn1','46bn2','46bz1','46bz2','49an1','49an2','49az1','49az2','49bn1','49bn2','49bz1','49cn1','49cn2','49cz1','49cz2','49dn1','49dn2','49dz1','49dz2','55an1','55an2','55az1','55az2','55bn1','55bz1','55cn1','64dn2','64dz2','64gn1','64gn2','64gz1','64gz2','64hn1','64hn2','64hz1','64hz2','65an2','65az1','65az2','65bn1','65bn2','65bz1','65bz2','65cn1','65cn2','65cz1','65cz2','65dn1','65dn2','65dz1','65dz2','65en1','65en2','65ez1','65ez2','65fn1','65fn2','65fz1','65fz2','65gn1','65gn2','65gz1','65gz2','65hn1','65hn2','65hz1','65hz2','66fn1','66fn2','66fz1','66fz2','66hn1','66hn2','67an1','67an2','67az1','67az2','67bn1','67bn2','67bz1','67bz2','67cn1','67cn2','67dn1','67dn2','67en1','67en2','67ez1','67ez2','67fn1','67fn2','67fz1','67fz2','67gn1','67gn2','67gz1','67gz2','67hn1','67hn2','67hz1','67hz2','70fz2'];
 			}
 		}
-	}
+	}*/
 }
