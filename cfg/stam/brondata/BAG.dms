@@ -16,7 +16,6 @@ container BAG
 //	parameter<string> snapshotdate := '20180701';
 	parameter<string> snapshotdate := '20230701';
 
-//	parameter<string> snapshotdir  := '%SourceDataDir%/BAG/snapshots.ext/AmsterdamAmstelveen/' + snapshotdate;
 //	parameter<string> snapshotdir  := '%SourceDataDir%/BAG/snapshots.ext/GrootNH/' + snapshotdate;
 	parameter<string> snapshotdir  := 'D:/SourceData/BAG20/snapshots.ext/' + snapshotdate;
 
@@ -33,11 +32,9 @@ container BAG
 	}
 
 	unit<uint32> vbo_import
-	:	StorageName     = "= impl/vbo_src_name"
-	,	StorageReadOnly = "True"
-	,	SyncMode        = "None"
-	,	DialogType      = "Map"
-	,	DialogData      = "geometry"
+	: StorageName     = "= impl/vbo_src_name"
+	, StorageReadOnly = "True"
+	, SyncMode        = "None"
 	{
 		attribute<string>      identificatie;
 
@@ -65,27 +62,12 @@ container BAG
 		attribute<nummeraanduiding> nummeraanduiding_rel := rlookup(nummeraanduiding_id, nummeraanduiding/identificatie);
 	}
 
-	unit<uint32> vbo 
-//	:= Subset(isDefined(rlookup(vbo_import/postcode, Brondata/postcode_NH_300m/Values)))
-	:= Subset(isDefined(vbo_import/geometry))
-	
-	,	DialogType      = "Map"
-	,	DialogData      = "geometry"
-	,	FreeData        = "False"
+	unit<uint32> vbo := select_with_attr_by_org_rel(vbo_import, isDefined(vbo_import/geometry))
 	{
-		attribute<string>      identificatie       := vbo_import/identificatie[nr_OrgEntity];
-		attribute<point_rd>    geometry            := vbo_import/geometry[nr_OrgEntity];
-
-		attribute<int32>       oppervlakte         := vbo_import/oppervlakte[nr_OrgEntity];
-		attribute<string>      nummeraanduiding_id := vbo_import/nummeraanduiding_id[nr_OrgEntity];
-		attribute<string>      postcode            := vbo_import/postcode[nr_OrgEntity];
-		attribute<string>      pand_id_geom        := vbo_import/pand_id_geom[nr_OrgEntity];
-		attribute<pand>        pand_rel            := rlookup(pand_id_geom, pand/identificatie);
-
 		container gebruiksdoelen :=
 			for_each_nedv(
 				co/gebruiksdoel_vbo/name
-				,'vbo_import/gebruiksdoelen/' + co/gebruiksdoel_vbo/name + '[nr_OrgEntity]'
+				,'vbo_import/gebruiksdoelen/' + co/gebruiksdoel_vbo/name + '[org_rel]'
 				, .
 				, bool
 			)
@@ -94,10 +76,7 @@ container BAG
 		}
 	}
 
-	unit<uint32> nummeraanduiding
-	:	StorageName     = "= impl/nummeraanduiding_src_name"
-	,	StorageReadOnly = "True"
-	,	SyncMode        = "None"
+	unit<uint32> nummeraanduiding: StorageName     = "= impl/nummeraanduiding_src_name"
 	{
 		attribute<string> identificatie;
 
@@ -164,9 +143,7 @@ container BAG
 		attribute<point_rd>        geometry       (poly) := geometry_mm[point_rd];
 
 		attribute<eenheden/jaar>   bouwjaar;
-//		attribute<uint32>          nr_buurpanden;
 		attribute<co/pandtype_geo> woonpand_type;
-		//attribute<bool>            in_aanbouw       := lowercase(meta/status) == 'bouwvergunning verleend' || lowercase(meta/status) == 'bouw gestart';
 
 		container meta
 		{
@@ -180,7 +157,9 @@ container BAG
 		attribute<uint32> nr_vbo                    := pcount(vbo/pand_rel);
 
 		attribute<uint32> nr_woningen               := sum(vbo/gebruiksdoelen/woon   ? 1 : 0, BAG/vbo/pand_rel);
-		attribute<bool>   heeft_woningen            := nr_woningen > 0;
+
+		attribute<bool>   test_inAmstelveen         := woonplaats/woonplaatsNaam[point_in_polygon(centroid(geometry), woonplaats/geometry)] == 'Amstelveen';
+		attribute<bool>   heeft_woningen            := nr_woningen > 0;// && test_inAmstelveen;
 		attribute<bool>   is_meergezins             := nr_woningen > 1;
 
 		attribute<uint32> nr_winkels                := sum(vbo/gebruiksdoelen/winkel ? 1 : 0, vbo/pand_rel);
@@ -205,12 +184,6 @@ container BAG
 			attribute<m> y_min     (..) := PointRow(lb)[m];
 			attribute<m> y_max     (..) := PointRow(ub)[m];
 		}
-		
-		/*attribute<point_rd>                   centroid              := point(bbox/x_min + 0.5f * bbox/dx, bbox/y_min + 0.5f * bbox/dy, point_rd); // de centroid_or_mid geeft incorrecte resultaten voor sommige geometrieen.
-
-		attribute<Geografie/blad_grid/domain> blad_grid_rel         := centroid[Geografie/blad_grid/domain];
-		attribute<Brondata/bag_blad>          blad_rel              := rlookup(blad_grid_rel, Brondata/bag_blad/values);
-		attribute<AHN4/blad>                  blad_src_rel          := point_in_polygon(centroid, Brondata/AHN4/blad/geometry);*/
 	}
 	unit<uint32> pand_met_woning := select_with_attr_by_cond(pand, pand/heeft_woningen)
 	{
@@ -226,13 +199,12 @@ container BAG
 			attribute<m> y_min     (..) := PointRow(lb)[m];
 			attribute<m> y_max     (..) := PointRow(ub)[m];
 		}
-		attribute<point_rd>                   centroid              := point(bbox/x_min + 0.5f * bbox/dx, bbox/y_min + 0.5f * bbox/dy, point_rd); // de centroid_or_mid geeft incorrecte resultaten voor sommige geometrieen.
+		attribute<point_rd>                   centroid      := point(bbox/x_min + 0.5f * bbox/dx, bbox/y_min + 0.5f * bbox/dy, point_rd); // de centroid_or_mid geeft incorrecte resultaten voor sommige geometrieen.
 
-		attribute<Geografie/blad_grid/domain> blad_grid_rel         := centroid[Geografie/blad_grid/domain];
-		attribute<Brondata/bag_blad>          blad_rel              := rlookup(blad_grid_rel, Brondata/bag_blad/values);
-		attribute<AHN4/blad>                  blad_src_rel          := point_in_polygon(centroid, Brondata/AHN4/blad/geometry);
+		attribute<Geografie/blad_grid/domain> blad_grid_rel := centroid[Geografie/blad_grid/domain];
+		attribute<Brondata/bag_blad>          blad_rel      := rlookup(blad_grid_rel, Brondata/bag_blad/values);
+		attribute<AHN4/blad>                  blad_src_rel  := point_in_polygon(centroid, Brondata/AHN4/blad/geometry);
 	}
-
 
 	unit<uint32> adres
 	:	StorageName     = "= impl/adres_src_name"
@@ -255,8 +227,7 @@ container BAG
 		attribute<vbo>               vbo_rel   := rlookup(nummeraanduiding_id, vbo/nummeraanduiding_id);
 		attribute<pand>              pand_rel  := vbo/pand_rel[vbo_rel];
 		attribute<string>            PCperPand := postcode + '_' + string(pand_rel);
-		
-		
+
 		attribute<uniquePCperPand>   uniquePCperPand_Rel := rlookup(PCperPand, uniquePCperPand/values);
 
 		unit<uint32> uniquePCperPand := unique(PCperPand)
@@ -271,13 +242,14 @@ container BAG
 			attribute<string> adres_range     := woonplaatsnaam + ' ' + straatnaam + ' '+ postcode + ' hnr: ' + string(hnr_min) + ' - ' + string(hnr_max);
 		}
 	}
-	unit<uint32> adres_NH := Subset(isDefined(point_in_polygon(adres/geometry, NH/Geometry )))
+
+	/*unit<uint32> adres_NH := Subset(isDefined(point_in_polygon(adres/geometry, NH/Geometry )))
 	,	DialogType      = "Map"
 	,	DialogData      = "geometry"
 	{
 		attribute<point_rd> geometry := adres/geometry[nr_OrgEntity];
 		attribute<string>   postcode := adres/postcode[nr_OrgEntity];
-	}
+	}*/
 
 
 }

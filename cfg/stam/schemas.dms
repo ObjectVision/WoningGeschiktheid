@@ -72,7 +72,7 @@ container schemas: Using = "Eenheden;Geografie"
 				 parameter<string> expr_list  := AsList('per_blad/' + blad/name + '/export/Generate', '+');
 				 parameter<string> expr_error := 'De lijst van te verwerken BAG pladen is niet compatibel met de huidige versie BAG en AHN. Activeer eerst item: /Brondata/Make_blad_ahn_with_bag_data/Generate en pas de conditie voor deze test aan.';
 			}
-			 parameter<string> all := = (Brondata/BAG/snapshotdate == '20230101' && Brondata/AHN4/AHN_version == 'AHN_4')
+			 parameter<string> all := = (Brondata/BAG/snapshotdate == '20230701' && Brondata/AHN4/AHN_version == 'AHN_4')
 				? impl/expr_list
 				: quote(impl/expr_error);
 		}

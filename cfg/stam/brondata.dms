@@ -135,6 +135,7 @@ container Brondata: Using = "Eenheden;Klassificaties;Geografie"
 	{
 		attribute<point_rd> geometry(poly) := provincie/geometry[nr_OrgEntity];
 	}
+	/*
 	unit<uint32> postcode_NH_BAG := unique(BAG/adres_NH/postcode)
 	{
 		attribute<string> PC6 := values, FreeData = "False";
@@ -148,6 +149,6 @@ container Brondata: Using = "Eenheden;Klassificaties;Geografie"
 
 	unit<uint32> postcode_NH      := unique(pc6_pc6_weg_300m_NH/PC6_org);
 	unit<uint32> postcode_NH_300m := unique(pc6_pc6_weg_300m_NH/PC6_dest);
-
+	*/
 	//#include<Dakvlakken.dms>
 }
