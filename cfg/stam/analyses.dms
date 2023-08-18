@@ -279,6 +279,14 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 				}
 			}
 		}
+		unit<uint32> pc6_export := Analyses/Geschiktheid/woning/pc6
+		,	StorageName = "D:/SourceData/OWO/geschikt_woon_pc6_sel_2023.fss"
+		{
+			attribute<string> postcode   := Analyses/Geschiktheid/woning/pc6/values;
+			attribute<uint32> ongeschikt := Analyses/Geschiktheid/woning/pc6/kans_ongeschikt[uint32];
+			attribute<uint32> aanpasbaar := Analyses/Geschiktheid/woning/pc6/kans_aanpasbaar[uint32];
+			attribute<uint32> geschikt   := Analyses/Geschiktheid/woning/pc6/kans_geschikt[uint32];
+		}
 	}
 	container AHNafleidingen
 	{
@@ -316,7 +324,7 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 	container herlinzen
 	{
 		unit<uint32> SrcFileName
-		:	StorageName = "%SourceDataDir%/OWO/pand_met_woning.csv"
+		:	StorageName = "D:/SourceData/OWO/pand_met_woning.csv"
 		,	StorageType = "gdal.vect"
 		,	StorageReadOnly = "True"
 		{
@@ -330,7 +338,7 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 				 : '';
 		}
 		unit<uint32> make_fss := SrcFileName
-		,	StorageName = "%SourceDataDir%/OWO/pand_met_woning_sel.fss"
+		,	StorageName = "D:/SourceData/OWO/pand_met_woning_2021.fss"
 		{
 			attribute<string> postcode       := SrcFileName/postcode;
 			attribute<string> identificatie  := SrcFileName/identificatie;
@@ -340,7 +348,7 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 			attribute<uint32> woningen_geschikt_totaal   := uint32(SrcFileName/woningen_geschikt_totaal);
 		}
 		unit<uint32> read_fss
-		:	StorageName = "%SourceDataDir%/OWO/pand_met_woning_sel.fss"
+		:	StorageName = "D:/SourceData/OWO/pand_met_woning_2021.fss"
 		{
 			attribute<string> postcode;
 			attribute<string> identificatie;
@@ -349,7 +357,26 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 			attribute<uint32> woningen_aanpasbaar_totaal;
 			attribute<uint32> woningen_geschikt_totaal;
 		}
-		container pand_met_woning_export
+		unit<uint32> vergelijk :=read_fss
+		{
+			attribute<string> postcode                       := read_fss/postcode;
+			attribute<string> identificatie                  := read_fss/identificatie;
+
+			attribute<uint32> woningen_ongeschikt_totaal_org := read_fss/woningen_ongeschikt_totaal;
+			attribute<uint32> woningen_aanpasbaar_totaal_org := read_fss/woningen_aanpasbaar_totaal;
+			attribute<uint32> woningen_geschikt_totaal_org   := read_fss/woningen_geschikt_totaal;
+			
+			attribute<uint32> woningen_ongeschikt_totaal_new := rjoin(identificatie, Analyses/Geschiktheid/pand_met_woning/identificatie_quoted , Analyses/Geschiktheid/pand_met_woning/woningen_ongeschikt_totaal);
+			attribute<uint32> woningen_aanpasbaar_totaal_new := rjoin(identificatie, Analyses/Geschiktheid/pand_met_woning/identificatie_quoted , Analyses/Geschiktheid/pand_met_woning/woningen_aanpasbaar_totaal);
+			attribute<uint32> woningen_geschikt_totaal_new   := rjoin(identificatie, Analyses/Geschiktheid/pand_met_woning/identificatie_quoted , Analyses/Geschiktheid/pand_met_woning/woningen_geschikt_totaal);
+
+			attribute<int32> delta_woningen_ongeschikt := woningen_ongeschikt_totaal_new[int32] - woningen_ongeschikt_totaal_org[int32];
+			attribute<int32> delta_woningen_aanpasbaar := woningen_aanpasbaar_totaal_new[int32] - woningen_aanpasbaar_totaal_org[int32];
+			attribute<int32> delta_woningen_geschikt   :=   woningen_geschikt_totaal_new[int32] - woningen_geschikt_totaal_org[int32];
+
+		}
+		
+		/*container pand_met_woning_export
 		{
 			unit<uint32> context:= SrcFileName;
 			
@@ -377,6 +404,44 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 			parameter<string> Result:= Header + system/NewLine + AsList(Body, system/NewLine)
 			,	StorageName = "=FileName"
 			,	StorageType = "str";
+		}*/
+		
+		container pc6
+		{
+			unit<uint32> geschikte_woningvoorraad_NL_org
+			:	StorageName = "D:/SourceData/OWO/geschikt_woon_pc6_sel_2021.fss"
+			,	StorageReadOnly = "True"
+			{
+				attribute<string>  postcode;
+				attribute<uint32>  ongeschikt;
+				attribute<uint32>  aanpasbaar;
+				attribute<uint32>  geschikt;
+				attribute<uint32>  woningen_totaal := ongeschikt + aanpasbaar + geschikt;
+			}
+			
+			unit<uint32> vergelijk := geschikte_woningvoorraad_NL_org
+			{
+				attribute<string> postcode                       := geschikte_woningvoorraad_NL_org/postcode;
+
+				attribute<float32> aandeel_ongeschikt_woningen_org := float32(geschikte_woningvoorraad_NL_org/ongeschikt) /  float32(geschikte_woningvoorraad_NL_org/woningen_totaal);
+				attribute<float32> aandeel_aanpasbaar_woningen_org := float32(geschikte_woningvoorraad_NL_org/aanpasbaar) /  float32(geschikte_woningvoorraad_NL_org/woningen_totaal);
+				attribute<float32> aandeel_geschikte_woningen_org  := float32(geschikte_woningvoorraad_NL_org/geschikt)   /  float32(geschikte_woningvoorraad_NL_org/woningen_totaal);
+
+				attribute<float32> woningen_ongeschikt_totaal_new := rjoin(postcode, Analyses/Geschiktheid/woning/pc6/Values , Analyses/Geschiktheid/woning/pc6/kans_ongeschikt);
+				attribute<float32> woningen_aanpasbaar_totaal_new := rjoin(postcode, Analyses/Geschiktheid/woning/pc6/Values , Analyses/Geschiktheid/woning/pc6/kans_aanpasbaar);
+				attribute<float32> woningen_geschikt_totaal_new   := rjoin(postcode, Analyses/Geschiktheid/woning/pc6/Values , Analyses/Geschiktheid/woning/pc6/kans_geschikt);
+				attribute<float32> woningen_totaal_new            := woningen_ongeschikt_totaal_new + woningen_aanpasbaar_totaal_new + woningen_geschikt_totaal_new;
+
+				attribute<float32> aandeel_ongeschikt_woningen_new := float32(woningen_ongeschikt_totaal_new) /  float32(woningen_totaal_new); 
+				attribute<float32> aandeel_aanpasbaar_woningen_new := float32(woningen_aanpasbaar_totaal_new) /  float32(woningen_totaal_new);
+				attribute<float32> aandeel_geschikte_woningen_new  := float32(woningen_geschikt_totaal_new)   /  float32(woningen_totaal_new);
+
+
+				attribute<float32> delta_woningen_ongeschikt := aandeel_ongeschikt_woningen_new - aandeel_ongeschikt_woningen_org;
+				attribute<float32> delta_woningen_aanpasbaar := aandeel_aanpasbaar_woningen_new - aandeel_aanpasbaar_woningen_org;
+				attribute<float32> delta_woningen_geschikt   := aandeel_geschikte_woningen_new  - aandeel_geschikte_woningen_org;
+
+			}
 		}
 	}
 }
