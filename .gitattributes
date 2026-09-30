@@ -1,0 +1,3 @@
+# GeoDMS config files are CRLF and are stored that way. Disable all EOL
+# conversion so checkouts are byte-exact on every platform.
+* -text
