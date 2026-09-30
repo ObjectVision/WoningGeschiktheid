@@ -29,9 +29,9 @@ container schemas: Using = "Eenheden;Geografie"
 		 unit<ipoint> domain:=
 			range(
 					gridset
-				   ,point(bbox/x_min, bbox/y_max, point_rd)[gridset]
-				   ,point(bbox/x_min, bbox/y_max, point_rd)[gridset] 
-				   + point(nr_cols, nr_rows, gridset)
+				   ,point_xy(bbox/x_min, bbox/y_max, point_rd)[gridset]
+				   ,point_xy(bbox/x_min, bbox/y_max, point_rd)[gridset] 
+				   + point_xy(nr_cols, nr_rows, gridset)
 			  )
 		,	DialogData = "point_rd"
 		{
@@ -72,14 +72,14 @@ container schemas: Using = "Eenheden;Geografie"
 				 parameter<string> expr_list  := AsList('per_blad/' + blad/name + '/export/Generate', '+');
 				 parameter<string> expr_error := 'De lijst van te verwerken BAG pladen is niet compatibel met de huidige versie BAG en AHN. Activeer eerst item: /Brondata/Make_blad_ahn_with_bag_data/Generate en pas de conditie voor deze test aan.';
 			}
-			 parameter<string> all := = (Brondata/BAG/snapshotdate == '20230701' && Brondata/AHN4/AHN_version == 'AHN_4')
+			 parameter<string> all := = (Brondata/BAG/snapshotdate == '20260101' && Brondata/AHN456/AHN_version == 'AHN4_AHN5_AHN6')
 				? impl/expr_list
 				: quote(impl/expr_error);
 		}
 	}
 
 	// Sectie lees AHN set vanuit verschillende BAG perspectieven
-	#include <ahn_set_to_BAG_perspectieven.dms>
+//	#include <ahn_set_to_BAG_perspectieven.dms>  // vervallen: AHN4+5+6 tegels worden direct gelezen in bag_blad.dms
 
 	// Sectie verwerk gegevens per bag blad
 	#include <bag_blad.dms>

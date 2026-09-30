@@ -39,6 +39,7 @@ template ahn_merge
 				attribute<uint8>     bouwlagen_ahn            ;
 				attribute<float32>   perc_vlak                ;
 				attribute<bool>      heeftMogelijkLiftschacht ;
+				attribute<uint8>     ahn_bron                 ;
 			}
 		}
 	}
@@ -53,5 +54,6 @@ template ahn_merge
 		attribute<uint8>     bouwlagen_ahn            := ='union_data(.,' + asItemList('per_blad/' + bladen/name + '/pand_met_woning/bouwlagen_ahn') + ')';
 		attribute<float32>   perc_vlak                := ='union_data(.,' + asItemList('per_blad/' + bladen/name + '/pand_met_woning/perc_vlak') + ')';
 		attribute<bool>      heeftMogelijkLiftschacht := ='union_data(.,' + asItemList('per_blad/' + bladen/name + '/pand_met_woning/heeftMogelijkLiftschacht') + ')';
+		attribute<uint8>     ahn_bron                 := ='union_data(.,' + asItemList('per_blad/' + bladen/name + '/pand_met_woning/ahn_bron') + ')';
 	}
 }

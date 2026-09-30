@@ -191,8 +191,8 @@ container Klassificaties: Using = "Eenheden"
 
 		unit<uint32> daktype_uint32 := combine(windstreek, cl/stijlheid)
 		{
-			attribute<string> label := windstreek/label[nr_1] + '_' + cl/stijlheid/label[nr_2];
-			attribute<uint8>  key   := nr_1 * 10b + nr_2;
+			attribute<string> label := windstreek/label[first_rel] + '_' + cl/stijlheid/label[second_rel];
+			attribute<uint8>  key   := first_rel * 10b + second_rel;
 		}
 
 		unit<uint8> daktype := range(uint8,0b,uint8(#daktype_uint32))

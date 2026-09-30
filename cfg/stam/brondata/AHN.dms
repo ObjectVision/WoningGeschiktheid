@@ -9,59 +9,32 @@
 //                                                                                                  //
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-container AHN4
+container AHN456
 {
-// bij nieuwe AHN of toevoegingen aan AHN, maak eerst bestand: %AHNDrive%/AHN4/dir_list.txt opnieuw aan met commando: dir /S /B > dir_list.txt in de %AHNDrive%/AHN4_cm folder
+// Tegel-index en rasters komen uit de voorgecombineerde AHN4+AHN5+AHN6 set.
+// De AHN6 > AHN5 > AHN4 fallback zit al in de tif's (zie prj/AHN_2_AHN_cm/scripts/combine_AHN4_AHN5_AHN6_to_uint16.py);
+// <cell>_src.tif bevat per cel de gebruikte AHN-versie (4/5/6, 0 = geen bron).
 
-	parameter<string> AHN_version:= 'AHN_4';
+	parameter<string> AHN_version := 'AHN4_AHN5_AHN6';
 
-	unit<uint32> blad_alle:
-		StorageName     = "='%AHNDrive%/' + AHN_version + '_cm/ahn_units.shp'"
+	unit<uint32> blad
+	:	StorageName     = "='%AHNDrive%/' + AHN_version + '_combination.gpkg'"
 	,	StorageType     = "gdal.vect"
 	,	StorageReadOnly = "True"
 	,	KeepData        = "True"
+	,	DialogType      = "Map"
+	,	DialogData      = "geometry"
 	{
 		attribute<point_rd> geometry (poly);
-		attribute<string>   unit;
-		attribute<bool>     IsIncorrect10dz2 := id(.) == 1403;
-		attribute<bool>     HeeftAHN4data    := isDefined(rlookup(lowercase(unit), lowercase(blad_files/with_data/values)));
-		attribute<bool>     conditie         := HeeftAHN4data && !IsIncorrect10dz2;
-	}
-
-	parameter<string> blad_files:
-		StorageName     = "='%AHNDrive%/' + AHN_version + '_cm/dir_list.txt'"
-	,	StorageType     = "str"
-	,	StorageReadOnly = "True"
-	,	KeepData        = "True"
-	{
-		parameter<uint32> nr_rows := strcount(blad_files, '\n');
-		unit<uint32> all := range(uint32,0,nr_rows)
-		{
-			parameter<string> Header         := ReadLines(blad_files, void, 0);
-			attribute<string> BodyRows (all) := ReadLines(blad_files, all, Header/ReadPos);
-		}
-		unit<uint32> tiff := select_orgrel(strcount(all/BodyRows,'.tif') > 0)
-		{
-			attribute<string> pathname          := all/BodyRows[org_rel];
-			attribute<uint32> startpos_filename := strrpos(pathname, '\\') + 1;
-			attribute<string> filename          := substr(pathname, startpos_filename);
-			attribute<string> bladname          := replace(filename, '.tif', '');
-		}
-		unit<uint32> blad_unique := unique(tiff/bladname)
-		{
-			attribute<uint32> count := pcount(rlookup(tiff/bladname, values));
-		}
-		unit<uint32> with_data := select_many(blad_unique, blad_unique/count == 2);
-	}
-
-	unit<uint32> blad := select_many(blad_alle, blad_alle/conditie) 
-	{
+		attribute<string>   name;                                     // 'cell_<i>_<j>'
+		attribute<string>   unit                 := name;              // owo-vocabulaire: 'unit' is de bladnaam
 		attribute<ipoint>   geometry_ipol (poly) := ipolygon(geometry);
-		attribute<string>   name                 := 'blad_' + unit;
+
 		attribute<Geografie/blad_grid/domain> blad_grid_rel := centroid(geometry)[Geografie/blad_grid/domain];
 
-		attribute<string> int_filename := expand(., '%AHNDrive%') + '/AHN_4_cm/DTM/' + unit + '.tif';
-		attribute<string> ruw_filename := replace(int_filename, 'DTM', 'DSM');
+		attribute<string> ruw_filename := expand(., '%AHNDrive%') + '/' + AHN_version + '/DSM/' + name + '_05m.tif';
+		attribute<string> int_filename := expand(., '%AHNDrive%') + '/' + AHN_version + '/DTM/' + name + '_05m.tif';
+		attribute<string> src_filename := expand(., '%AHNDrive%') + '/' + AHN_version + '/DSM/' + name + '_src.tif';
 	}
 
 	container inwinjaren_AHN
@@ -103,17 +76,5 @@ container AHN4
 			attribute<point_rd> geometry (poly) := union_data(., yr2020/geometry, yr2021/geometry, yr2022/geometry);
 			attribute<uint16>   inwinjaar       := union_data(., const(uint16(2020),yr2020), const(uint16(2021),yr2021), const(uint16(2022),yr2022));
 		}
-	}
-	container BAG_perspectieven
-	{
-		unit<uint32> blad := unique(overlay_ahn_with_bag_data/second_rel), label = "unieke AHN bladen met BAG data"
-		{
-			attribute<string> name := brondata/AHN4/blad/name[values];
-		}
-
-		container per_blad := for_each_ne(
-			 blad/name
-			,'Schemas/ahn_set_to_BAG_perspectieven/bepaal_BAG_perspectief_griddomeinen_en_lees_data_per_blad(brondata/AHN4/blad,' + string(blad/values) + ')'
-		);
 	}
 }

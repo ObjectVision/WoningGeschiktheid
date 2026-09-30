@@ -36,11 +36,11 @@ container Brondata: Using = "Eenheden;Klassificaties;Geografie"
 			unit<uint32> pointset := union_unit(., ., ., ., .), DisableStorage  = "True"
 			{
 				attribute<point_rd> point := union_data(.
-					, point(x_min, y_max, point_rd)
-					, point(x_max, y_max, point_rd)
-					, point(x_max, y_min, point_rd)
-					, point(x_min, y_min, point_rd)
-					, point(x_min, y_max, point_rd)
+					, point_xy(x_min, y_max, point_rd)
+					, point_xy(x_max, y_max, point_rd)
+					, point_xy(x_max, y_min, point_rd)
+					, point_xy(x_min, y_min, point_rd)
+					, point_xy(x_min, y_max, point_rd)
 				);
 				attribute<uint32>   sequence := id(.) % #bag_blad;
 				attribute<bag_blad> ordinal  := convert(id(.) / #bag_blad, bag_blad);
@@ -50,12 +50,12 @@ container Brondata: Using = "Eenheden;Klassificaties;Geografie"
 			attribute<ipoint>   geometry_ipol (poly) := ipolygon(geometry);
 		}
 
-		unit<uint32> overlay := overlay_polygon(bag_blad/geometry_ipol, brondata/AHN4/blad/geometry_ipol), StorageName = "%LocalDataProjDir%/blad_overlay.fss"
+		unit<uint32> overlay := bg_overlay_polygon(bag_blad/geometry_ipol, brondata/AHN456/blad/geometry_ipol), StorageName = "%LocalDataProjDir%/blad_overlay.fss"
 		{
-			attribute<string>    AHN_UNIT    := brondata/AHN4/blad/UNIT[second_rel];
+			attribute<string>    AHN_UNIT    := brondata/AHN456/blad/UNIT[second_rel];
 			attribute<string>    BAG_UNIT    := bag_blad/UNIT[first_rel];
 			attribute<bag_blad>  first_rel;
-			attribute<AHN4/blad> second_rel;
+			attribute<AHN456/blad> second_rel;
 			attribute<IPoint>    geometry(poly);
 
 			unit<uint32> unique := unique(first_rel), label = "unieke AHN bladen met BAG data", StorageName = "%LocalDataProjDir%/blad_unique.fss"
@@ -71,8 +71,8 @@ container Brondata: Using = "Eenheden;Klassificaties;Geografie"
 		attribute<ipoint>    values;
 		attribute<string>    unit;
 		attribute<string>    name;
-		//attribute<uint32>    nr_pand (AHN4/blad) := pcount(blad_rel);
-		//attribute<AHN4/blad> blad_rel;
+		//attribute<uint32>    nr_pand (AHN456/blad) := pcount(blad_rel);
+		//attribute<AHN456/blad> blad_rel;
 
 		attribute<m>         x_min;
 		attribute<m>         x_max;
@@ -118,22 +118,44 @@ container Brondata: Using = "Eenheden;Klassificaties;Geografie"
 		attribute<string> PC6_dest;
 		attribute<m>      impedance;
 	}
-	unit<uint32> pc6_pc6_weg_300m := range(uint32,0,#pc6_pc6_weg_300m_uint64)
+	unit<uint32> pc6_pc6_weg_300m := range(uint32, 0, uint32(#pc6_pc6_weg_300m_uint64))
 	{
 		attribute<string>  PC6_org   := union_data(.,pc6_pc6_weg_300m_uint64/PC6_org);
 		attribute<string>  PC6_dest  := union_data(.,pc6_pc6_weg_300m_uint64/PC6_dest);
 		attribute<float32> impedance := union_data(.,pc6_pc6_weg_300m_uint64/impedance);
 	}
-	unit<uint32> provincie
-	:	StorageName = "%SourceDataDir%/CBS/provincie.shp"
-	,	DialogType   = "Map"
-	,	DialogData   = "geometry"
+	// CBS Gebiedsindelingen: levert de provinciegrenzen en de gemeente -> provincie koppeling.
+	// Dit is dezelfde bron die MDAWonenZorgLimburg gebruikt.
+	container CBS
+	:	StorageName     = "%SourceDataDir%/CBS/2026/cbsgebiedsindelingen2026.gpkg"
+	,	StorageType     = "gdal.vect"
+	,	StorageReadOnly = "True"
+	,	SyncMode        = "alltables"
 	{
-		attribute<point_rd> geometry(poly);
+		unit<uint32> gebiedsindelingen_register;
+
+		unit<uint32> provincie_gegeneraliseerd
+		:	DialogType = "Map"
+		,	DialogData = "geometry"
+		{
+			attribute<point_rd> geometry (poly);
+		}
 	}
-	unit<uint32> NH := Subset(id(provincie) == 7)
+
+	// Studiegebied: alle gemeenten in een provincie. Verbreden/versmallen = alleen pv_code aanpassen.
+	container studiegebied
 	{
-		attribute<point_rd> geometry(poly) := provincie/geometry[nr_OrgEntity];
+		parameter<string> pv_code := 'PV31';   // PV31 = Limburg
+
+		unit<uint32> gemeente := select_with_attr_by_org_rel(CBS/gebiedsindelingen_register, CBS/gebiedsindelingen_register/pv_code == pv_code)
+		{
+			// gm_code wordt door select_with_attr_by_org_rel meegenomen
+			attribute<string> code := substr(gm_code, 2, 4);   // 'GM0957' -> '0957', gelijk aan de eerste 4 posities van een BAG pand-id
+		}
+
+		unit<uint32> provincie := select_with_attr_by_org_rel(CBS/provincie_gegeneraliseerd, CBS/provincie_gegeneraliseerd/statcode == pv_code)
+		,	DialogType = "Map"
+		,	DialogData = "geometry";
 	}
 	/*
 	unit<uint32> postcode_NH_BAG := unique(BAG/adres_NH/postcode)

@@ -13,6 +13,16 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 {
 	container Geschiktheid
 	{
+		// AHN-bron (uit <cell>_src.tif) -> inwinjaar. Index = de uint8 bronwaarde; 0-3 komen niet voor.
+		// Dit jaartal bepaalt waar nr_bouwlagen terugvalt van AHN-afgeleid naar vbo-afgeleid (bouwjaar >= inwinjaar).
+		// Inwinperiodes: AHN4 2020-2022, AHN5 2023-2024, AHN6 2025-2027 (nog lopend).
+		// Per bron wordt het laatste jaar van de tot nu toe ingewonnen data aangehouden.
+		// LET OP: zodra AHN6-data van 2026/2027 wordt toegevoegd, hoort de 2025 hieronder mee te schuiven.
+		unit<uint8> ahn_inwinjaar : nrofrows = 7
+		{
+			attribute<Eenheden/jaar> inwinjaar : [0, 0, 0, 0, 2022, 2024, 2025];
+		}
+
 		unit<uint32> woning := select_with_attr_by_org_rel(Brondata/BAG/vbo, Brondata/BAG/vbo/gebruiksdoelen/woon)
 		{
 			attribute<float32> kans_ongeschikt := rjoin(pand_id_geom, pand_met_woning/identificatie, pand_met_woning/woningen_ongeschikt_rel);
@@ -83,7 +93,9 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 			attribute<m2>            area                                 := area(geometry, m2);
 			attribute<int32>         area_m2_afgerond                     := round(area);
 			attribute<verdieping>    nr_bouwlagen_vbo_opp_pand            := roundup(sum_vbo_oppervlaktes / area)[verdieping];
-			attribute<jaar>          inwinjaar                            := value(Brondata/AHN4/inwinjaren_AHN/totaal/inwinjaar[point_in_polygon(centroid_or_mid(Geometry), Brondata/AHN4/inwinjaren_AHN/totaal/geometry[point_rd])], jaar);
+			// Inwinjaar volgt nu uit de AHN-bron per pand (<cell>_src.tif), niet meer uit de AHN4-inwinjaarvlakken:
+			// de hoogte kan uit AHN4, AHN5 of AHN6 komen. Zie ahn_inwinjaar hierboven voor de jaartallen.
+			attribute<jaar>          inwinjaar                            := ahn_inwinjaar/inwinjaar[AHNafleidingen/pand/ahn_bron[org_rel]];
 
 			attribute<verdieping>    nr_bouwlagen                         := 
 				max_elem( 1[verdieping]
@@ -232,7 +244,7 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 
 				// Voor relatie naar AHN bladen
 
-				attribute<point_rd>                   centroid               (pand_met_woning) := point(bbox/x_min + 0.5f * bbox/dx, bbox/y_min + 0.5f * bbox/dy, point_rd); // de centroid_or_mid geeft incorrecte resultaten voor sommige geometrieen.
+				attribute<point_rd>                   centroid               (pand_met_woning) := point_xy(bbox/x_min + 0.5f * bbox/dx, bbox/y_min + 0.5f * bbox/dy, point_rd); // de centroid_or_mid geeft incorrecte resultaten voor sommige geometrieen.
 				attribute<Geografie/blad_grid/domain> blad_grid_rel          (pand_met_woning) := centroid[Geografie/blad_grid/domain];
 				attribute<blad>                       blad_rel               (pand_met_woning) := rlookup(blad_grid_rel, blad/values);
 
@@ -253,7 +265,7 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 				{
 					attribute<string>   unit                 := Geografie/blad_grid/unit[values];
 					attribute<string>   name                 := Geografie/blad_grid/name[values];
-					attribute<AHN/blad> blad_rel             := rlookup(unit, AHN/blad/unit);
+					attribute<Brondata/AHN456/blad> blad_rel := rlookup(unit, Brondata/AHN456/blad/unit);
 
 					parameter<m>        buffer               := 2[m];
 					attribute<m>        x_min                := min(bbox/x_min, impl/blad_rel) - buffer;
@@ -267,11 +279,11 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 					unit<uint32> pointset := union_unit(., ., ., ., .)
 					{
 						attribute<point_rd> point := union_data(.
-							, point(x_min, y_max, point_rd)
-							, point(x_max, y_max, point_rd)
-							, point(x_max, y_min, point_rd)
-							, point(x_min, y_min, point_rd)
-							, point(x_min, y_max, point_rd)
+							, point_xy(x_min, y_max, point_rd)
+							, point_xy(x_max, y_max, point_rd)
+							, point_xy(x_max, y_min, point_rd)
+							, point_xy(x_min, y_min, point_rd)
+							, point_xy(x_min, y_max, point_rd)
 						);
 						attribute<uint32> sequence := id(.) % #blad;
 						attribute<blad>   ordinal  := value(id(.) / #blad, blad);
@@ -279,6 +291,51 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 				}
 			}
 		}
+		//////////////////////////////////////////////////////////////////////////////////////////////
+		// Eindresultaat: per pand met woningen in het studiegebied (provincie Limburg) het aandeel
+		// ongeschikte / aanpasbare / geschikte woningen. Twee schrijfvormen van dezelfde gegevens:
+		//   geschiktheid_export      -> .fss  (native, direct leesbaar door o.a. MDAWonenZorgLimburg)
+		//   geschiktheid_export_csv  -> .csv  (voor inspectie en uitwisseling)
+		// Activeer /Analyses/Geschiktheid/geschiktheid_export        voor de .fss
+		// Activeer /Analyses/Geschiktheid/geschiktheid_export_csv/Result voor de .csv
+		//////////////////////////////////////////////////////////////////////////////////////////////
+		unit<uint32> geschiktheid_export := pand_met_woning
+		,	StorageName = "='%LocalDataProjDir%/pand_met_woning_geschiktheid_' + Brondata/studiegebied/pv_code + '_' + Brondata/BAG/snapshotdate + '.fss'"
+		{
+			attribute<string>  identificatie              := pand_met_woning/identificatie;
+			attribute<float32> woningen_ongeschikt_rel    := pand_met_woning/woningen_ongeschikt_rel;
+			attribute<float32> woningen_aanpasbaar_rel    := pand_met_woning/woningen_aanpasbaar_rel;
+			attribute<float32> woningen_geschikt_rel      := pand_met_woning/woningen_geschikt_rel;
+
+			attribute<uint32>  woningen_ongeschikt_totaal := pand_met_woning/woningen_ongeschikt_totaal;
+			attribute<uint32>  woningen_aanpasbaar_totaal := pand_met_woning/woningen_aanpasbaar_totaal;
+			attribute<uint32>  woningen_geschikt_totaal   := pand_met_woning/woningen_geschikt_totaal;
+		}
+
+		container geschiktheid_export_csv
+		{
+			unit<uint32> context := geschiktheid_export;
+
+			parameter<string> FieldList      := 'identificatie;woningen_ongeschikt_rel;woningen_aanpasbaar_rel;woningen_geschikt_rel;woningen_ongeschikt_totaal;woningen_aanpasbaar_totaal;woningen_geschikt_totaal';
+			parameter<string> FieldSeperator := ';';
+			parameter<string> FileName       := '%LocalDataProjDir%/pand_met_woning_geschiktheid_' + Brondata/studiegebied/pv_code + '_' + Brondata/BAG/snapshotdate + '.csv';
+
+			unit<uint32> field := range(uint32, 0, strcount(FieldList,';') + 1)
+			{
+				attribute<string> Name := ReadArray(FieldList, ., string, 0);
+			}
+
+			parameter<string> Header := FieldList;
+			attribute<string> Body (context) :=
+				=AsList(
+					+'String(context/'+Field/Name+')',' + '+Quote(FieldSeperator)+' +'
+				);
+
+			parameter<string> Result := Header + system/NewLine + AsList(Body, system/NewLine)
+			,	StorageName = "=FileName"
+			,	StorageType = "str";
+		}
+
 		unit<uint32> pc6_export := Analyses/Geschiktheid/woning/pc6
 		,	StorageName = "D:/SourceData/OWO/geschikt_woon_pc6_sel_2023.fss"
 		{
@@ -290,9 +347,9 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 	}
 	container AHNafleidingen
 	{
-		container merge_AHN_data_per_BAG_blad := schemas/ahn_merge('AHN', Brondata/blad_ahn_with_bag_data );
+		container merge_AHN_data_per_BAG_blad := schemas/ahn_merge('AHN456', Brondata/blad_ahn_with_bag_data );
 
-		unit<uint32> AHN : StorageName = "%LocalDataProjDir%/AHN/pand_met_woning.fss", StorageReadOnly = "True"
+		unit<uint32> AHN : StorageName = "%LocalDataProjDir%/AHN456/pand_met_woning.fss", StorageReadOnly = "True"
 		,	DialogType = "Map"
 		,	DialogData = "geometry"
 		{
@@ -304,11 +361,12 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 			attribute<uint8>     bouwlagen_ahn;
 			attribute<float32>   perc_vlak;
 			attribute<bool>      heeftMogelijkLiftschacht;
+			attribute<uint8>     ahn_bron;
 			
 			attribute<point_rd> geometry (poly):= rjoin(identificatie,BAG/pand/identificatie, BAG/pand/geometry);
 		}
 
-		container Genereer_AHN_data_per_BAG_blad := schemas/verwerk_AHNSet('AHN', brondata/blad_ahn_with_bag_data);
+		container Genereer_AHN_data_per_BAG_blad := schemas/verwerk_AHNSet('AHN456', brondata/blad_ahn_with_bag_data);
 
 		unit<uint32> pand := BAG/pand
 		{
@@ -318,6 +376,7 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 			attribute<bool>       heeftMogelijkLiftschacht := rjoin(BAG/pand/identificatie, AHN/identificatie, AHN/heeftMogelijkLiftschacht);
 			attribute<ratio>      perc_vlak                := rjoin(BAG/pand/identificatie, AHN/identificatie, AHN/perc_vlak);
 			attribute<cm_uint16>  hoogte                   := rjoin(BAG/pand/identificatie, AHN/identificatie, AHN/hoogte);
+			attribute<uint8>      ahn_bron                 := rjoin(BAG/pand/identificatie, AHN/identificatie, AHN/ahn_bron);
 		}
 	}
 

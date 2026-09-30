@@ -21,46 +21,46 @@ container Geografie: Using = "Eenheden;Klassificaties"
 // 	unit<fpoint> point_rd_base  :
 // 		DialogData = "ngr_layer" 
 // 	,	Format     = "EPSG:28992";
-// 	unit<fpoint> point_rd      := range(point_rd_base, point(300000f,0f), point(625000f,280000f));
+// 	unit<fpoint> point_rd      := range(point_rd_base, point_xy(300000f,0f), point_xy(625000f,280000f));
 
 	unit<float32> coord_rd := m;
 	unit<fpoint>  point_rd: // baseunit('m', fpoint);
-		Format     = "EPSG:28992",
+		SpatialReference = "EPSG:28992",
 		DialogData = "ngr_layer"; // wms achtergrondlaag voor kaarten met rd coordinaten
 
 	unit<ipoint>  point_rd_mm := // for polygon functions
 		gridset(
 			  point_rd
-			, point(0.001f, 0.001f, point_rd)
-			, point(0f    , 0f    , point_rd)
+			, point_xy(0.001f, 0.001f, point_rd)
+			, point_xy(0f    , 0f    , point_rd)
 			, ipoint
 		);
 
 	unit<ipoint> ahn_blok_gridset  := 
 		gridset(
 			 point_rd
-			,point(5000m, -6250m, point_rd)
-			,point(0f, 0f, point_rd)
+			,point_xy(10000m, -10000m, point_rd)
+			,point_xy(0f, 0f, point_rd)
 			,ipoint
 		);
 
 	unit<ipoint> ahn_tiles_gridset  := 
 		gridset(
 			 point_rd
-			,point(0.5m, -0.5m, point_rd)
-			,point(0f, 0f, point_rd)
+			,point_xy(0.5m, -0.5m, point_rd)
+			,point_xy(0f, 0f, point_rd)
 			,ipoint
 		);
 
 	container blad_bbox
 	{
-		attribute<point_rd> lowerbound (Brondata/AHN4/blad) := lower_bound(Brondata/AHN4/blad/geometry);
-		attribute<point_rd> upperbound (Brondata/AHN4/blad) := upper_bound(Brondata/AHN4/blad/geometry);
+		attribute<point_rd> lowerbound (Brondata/AHN456/blad) := lower_bound(Brondata/AHN456/blad/geometry);
+		attribute<point_rd> upperbound (Brondata/AHN456/blad) := upper_bound(Brondata/AHN456/blad/geometry);
 
-		attribute<m>        x_min_att  (Brondata/AHN4/blad) := PointCol(lowerbound)[m];
-		attribute<m>        x_max_att  (Brondata/AHN4/blad) := PointCol(upperbound)[m];
-		attribute<m>        y_min_att  (Brondata/AHN4/blad) := PointRow(lowerbound)[m];
-		attribute<m>        y_max_att  (Brondata/AHN4/blad) := PointRow(upperbound)[m];
+		attribute<m>        x_min_att  (Brondata/AHN456/blad) := PointCol(lowerbound)[m];
+		attribute<m>        x_max_att  (Brondata/AHN456/blad) := PointCol(upperbound)[m];
+		attribute<m>        y_min_att  (Brondata/AHN456/blad) := PointRow(lowerbound)[m];
+		attribute<m>        y_max_att  (Brondata/AHN456/blad) := PointRow(upperbound)[m];
 
 		parameter<m>        x_min      := min(x_min_att);
 		parameter<m>        x_max      := max(x_max_att);
@@ -68,21 +68,21 @@ container Geografie: Using = "Eenheden;Klassificaties"
 		parameter<m>        y_max      := max(y_max_att);
 	}
 
-	container blad_grid := schemas/define_grid(ahn_blok_gridset, 5000[m], 6250[m], blad_bbox)
+	container blad_grid := schemas/define_grid(ahn_blok_gridset, 10000[m], 10000[m], blad_bbox)
 	{
-		attribute<string> unit (domain) := first(Brondata/AHN4/blad/unit, Brondata/AHN4/blad/blad_grid_rel);
-		attribute<string> name (domain) := first(Brondata/AHN4/blad/name, Brondata/AHN4/blad/blad_grid_rel);
+		attribute<string> unit (domain) := first(Brondata/AHN456/blad/unit, Brondata/AHN456/blad/blad_grid_rel);
+		attribute<string> name (domain) := first(Brondata/AHN456/blad/name, Brondata/AHN456/blad/blad_grid_rel);
 	}
 
 	// voor buffer points bepaling
-	unit<spoint> kernel_buffer := range(spoint, point(-2s, -2s), point(3s,3s))
+	unit<spoint> kernel_buffer := range(spoint, point_xy(-2s, -2s), point_xy(3s,3s))
 	{
-		attribute<uint32>  dist     := dist2(point(0s, 0s, .), uint32);
+		attribute<uint32>  dist     := dist2(point_xy(0s, 0s, .), uint32);
 		attribute<float32> distMatr := dist <= 5 ? 1f : 0f;
 	}
-	unit<spoint> kernel_interpolate := range(spoint, point(-1s, -1s), point(2s,2s))
+	unit<spoint> kernel_interpolate := range(spoint, point_xy(-1s, -1s), point_xy(2s,2s))
 	{
-		attribute<uint32>  dist     := dist2(point(0s, 0s, .), uint32);
+		attribute<uint32>  dist     := dist2(point_xy(0s, 0s, .), uint32);
 		attribute<float32> distMatr := dist < 2 ? 1f : 0f;
 	}
 }

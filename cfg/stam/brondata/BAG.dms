@@ -14,10 +14,10 @@
 container BAG
 {
 //	parameter<string> snapshotdate := '20180701';
-	parameter<string> snapshotdate := '20230701';
+	parameter<string> snapshotdate := '20260101';
 
 //	parameter<string> snapshotdir  := '%SourceDataDir%/BAG/snapshots.ext/GrootNH/' + snapshotdate;
-	parameter<string> snapshotdir  := 'D:/SourceData/BAG20/snapshots.ext/' + snapshotdate;
+	parameter<string> snapshotdir  := 'D:/SourceData/BAG/snapshots.ext/' + snapshotdate;
 
 	container impl
 	{
@@ -54,7 +54,7 @@ container BAG
 				, bool
 			)
 		{
-			attribute<bool> alle (vbo) := =AsList(co/gebruiksdoel_vbo/name, ' && ');
+			attribute<bool> alle (vbo_import) := =AsList(co/gebruiksdoel_vbo/name, ' && ');
 		}
 		attribute<string>      gemeentecode := substr(identificatie,0,4);
 		attribute<Brondata/pc6_pc6_weg_300m> pc6_pc6_weg_300m_rel:= rlookup(postcode, Brondata/pc6_pc6_weg_300m/PC6_org);
@@ -72,7 +72,7 @@ container BAG
 				, bool
 			)
 		{
-			attribute<bool> alle (vbo) := =AsList(co/gebruiksdoel_vbo/name, ' && ');
+			attribute<bool> alle (vbo)          := =AsList(co/gebruiksdoel_vbo/name, ' && ');
 		}
 	}
 
@@ -158,8 +158,13 @@ container BAG
 
 		attribute<uint32> nr_woningen               := sum(vbo/gebruiksdoelen/woon   ? 1 : 0, BAG/vbo/pand_rel);
 
-		attribute<bool>   test_inAmstelveen         := woonplaats/woonplaatsNaam[point_in_polygon(centroid(geometry), woonplaats/geometry)] == 'Amstelveen';
-		attribute<bool>   heeft_woningen            := nr_woningen > 0;// && test_inAmstelveen;
+		// Studiegebiedfilter: de eerste 4 posities van een BAG pand-id zijn de gemeentecode.
+		// Dit is de enige plek waar de omvang van de hele berekening wordt bepaald: bag_blad,
+		// de AHN-tegelselectie en alle afgeleide .fss volgen hieruit.
+		attribute<string> gemeentecode              := substr(identificatie, 0, 4);
+		attribute<bool>   in_studiegebied           := IsDefined(rlookup(gemeentecode, studiegebied/gemeente/code));
+
+		attribute<bool>   heeft_woningen            := nr_woningen > 0 && in_studiegebied;
 		attribute<bool>   is_meergezins             := nr_woningen > 1;
 
 		attribute<uint32> nr_winkels                := sum(vbo/gebruiksdoelen/winkel ? 1 : 0, vbo/pand_rel);
@@ -199,11 +204,11 @@ container BAG
 			attribute<m> y_min     (..) := PointRow(lb)[m];
 			attribute<m> y_max     (..) := PointRow(ub)[m];
 		}
-		attribute<point_rd>                   centroid      := point(bbox/x_min + 0.5f * bbox/dx, bbox/y_min + 0.5f * bbox/dy, point_rd); // de centroid_or_mid geeft incorrecte resultaten voor sommige geometrieen.
+		attribute<point_rd>                   centroid      := point_xy(bbox/x_min + 0.5f * bbox/dx, bbox/y_min + 0.5f * bbox/dy, point_rd); // de centroid_or_mid geeft incorrecte resultaten voor sommige geometrieen.
 
 		attribute<Geografie/blad_grid/domain> blad_grid_rel := centroid[Geografie/blad_grid/domain];
 		attribute<Brondata/bag_blad>          blad_rel      := rlookup(blad_grid_rel, Brondata/bag_blad/values);
-		attribute<AHN4/blad>                  blad_src_rel  := point_in_polygon(centroid, Brondata/AHN4/blad/geometry);
+		attribute<AHN456/blad>                  blad_src_rel  := point_in_polygon(centroid, Brondata/AHN456/blad/geometry);
 	}
 
 	unit<uint32> adres

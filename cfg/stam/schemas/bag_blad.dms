@@ -25,7 +25,7 @@ container bag_blad
 			parameter<string> generate := 'Ready'
 			,	ExplicitSuppliers = "pand_met_woning_export/identificatie;pand_met_woning_export/hoogte;pand_met_woning_export/hoogte_nok"
 									";pand_met_woning_export/hoogte_maaiveld_offset;pand_met_woning_export/bouwlagen_ahn;pand_met_woning_export/perc_vlak"
-									";pand_met_woning_export/heeftMogelijkLiftschacht";
+									";pand_met_woning_export/heeftMogelijkLiftschacht;pand_met_woning_export/ahn_bron";
 
 			unit<uint32> pand_met_woning_export: = pand_met_woning
 			,	StorageName = "='%LocalDataProjDir%/bladen/' + AHNSet + '/pand_met_woning/' + unit + '.fss'"
@@ -37,6 +37,7 @@ container bag_blad
 				attribute<uint8>     bouwlagen_ahn            := hoogtes_en_daken/liftschachten/pand_met_woning_alle/bouwlagen_ahn;
 				attribute<float32>   perc_vlak                := rjoin(identificatie, hoogtes_en_daken/liftschachten/pand_met_woning_voor_liftbepaling/identificatie, hoogtes_en_daken/liftschachten/pand_met_woning_voor_liftbepaling/ratio_vlak);
 				attribute<bool>      heeftMogelijkLiftschacht := rjoin(identificatie, hoogtes_en_daken/liftschachten/pand_met_woning_voor_liftbepaling/identificatie, hoogtes_en_daken/liftschachten/pand_met_woning_voor_liftbepaling/heeftMogelijkLiftschacht);
+				attribute<uint8>     ahn_bron                 := pand_met_woning/ahn_bron;
 			}
 		}
 
@@ -50,6 +51,7 @@ container bag_blad
 			attribute<cm_uint16> hoogte                  := hoogtes_en_daken/hoogte/pand_met_woning_hoogte;
 			attribute<cm_uint16> hoogte_nok              := hoogtes_en_daken/hoogte/nok_hoogte;
 			attribute<cm_uint16> hoogte_maaiveld_offset  := hoogtes_en_daken/hoogte/impl/buffer_hoogte_offset;
+			attribute<uint8>     ahn_bron                := max(AHN/SRC/bron, hoogtes_en_daken/pand_met_woning_rel); // nieuwste AHN-versie over de footprint
 		}
 
 		container AHN
@@ -68,20 +70,25 @@ container bag_blad
 				unit<uint32> pointset := union_unit(vlak, vlak, vlak, vlak, vlak)
 				{
 					attribute<point_rd> point := union_data(.
-						, point(x_min, y_max, point_rd)
-						, point(x_max, y_max, point_rd)
-						, point(x_max, y_min, point_rd)
-						, point(x_min, y_min, point_rd)
-						, point(x_min, y_max, point_rd)
+						, point_xy(x_min, y_max, point_rd)
+						, point_xy(x_max, y_max, point_rd)
+						, point_xy(x_max, y_min, point_rd)
+						, point_xy(x_min, y_min, point_rd)
+						, point_xy(x_min, y_max, point_rd)
 					);
 				}
 				container Grid := Schemas/define_grid(ahn_tiles_gridset, 0.5[m], 0.5[m], vlak);
 			}
 
-			unit<uint32> bladen := Select_many(overlay_ahn_with_bag_data, overlay_ahn_with_bag_data/first_rel == blad_rel);
+			unit<uint32> bladen := select_with_attr_by_org_rel(overlay_ahn_with_bag_data, overlay_ahn_with_bag_data/first_rel == blad_rel)
+			{
+				// AHN_UNIT wordt door select_with_attr_by_org_rel meegenomen
+				attribute<string> name := 'blad_' + AHN_UNIT;
+			}
 
 			container DSM := merge_AHN_bladen(vlak/Grid/domain, 'DSM');
 			container DTM := merge_AHN_bladen(vlak/Grid/domain, 'DTM');
+			container SRC := merge_AHN_src(vlak/Grid/domain);
 		}
 
 		container hoogtes_en_daken := bepaal_hoogtes_en_daken(pand_met_woning, AHN/vlak/Grid/domain, AHN/DSM/hoogte_met_offset, AHN/DTM/hoogte_met_offset);
@@ -90,17 +97,64 @@ container bag_blad
 	template merge_AHN_bladen
 	{
 		// begin case parameters
-		unit<ipoint> GridDomain;
-		parameter<string> type;
+		unit<ipoint>      GridDomain;
+		parameter<string> type;                  // 'DSM' of 'DTM'
 		// end case parameters
 
-		parameter<string> blad_list_expr := asList('Brondata/AHN4/BAG_Perspectieven/per_blad/blad_' + bladen/AHN_unit   + '/' + type +'/Grid/files/blad_' + UNIT, ',');
+		container per_tile := for_each_ne(bladen/name, 'lees_tile(' + quote(bladen/AHN_UNIT) + ')');
 
-		attribute<cm_uint16> hoogte_met_offset (GridDomain) := ='raster_merge(
-			 GridDomain 
-			,cm_uint16
-			,' + blad_list_expr + 
-		')';
+		template lees_tile
+		{
+			// begin case parameters
+			parameter<string> tile;
+			// end case parameters
+
+			unit<ipoint> grid
+			:	StorageName     = "='%AHNDrive%/' + Brondata/AHN456/AHN_version + '/' + type + '/' + tile + '_05m.tif'"
+			,	StorageType     = "gdal.grid"
+			,	StorageReadOnly = "True"
+			,	DialogData      = "point_rd"
+			{
+				attribute<cm_uint16> GridData;
+			}
+		}
+
+		attribute<cm_uint16> hoogte_met_offset_raw (GridDomain) :=
+			='raster_merge(GridDomain, cm_uint16, ' + asList('per_tile/' + bladen/name + '/grid/GridData', ',') + ')';
+
+		// nodata in de tif's is 0 (niet null). Zonder deze maskering telt 0 cm (= -100 m NAP na de
+		// +10000 cm offset) mee in rth_element en verpest het zowel het maaiveld- als het dakpercentiel.
+		attribute<cm_uint16> hoogte_met_offset (GridDomain) :=
+			hoogte_met_offset_raw > 0[cm_uint16] ? hoogte_met_offset_raw : (0 / 0)[cm_uint16];
+	}
+
+	// AHN-bron (provenance) per cel: 4 = AHN4, 5 = AHN5, 6 = AHN6, 0 = geen bron
+	template merge_AHN_src
+	{
+		// begin case parameters
+		unit<ipoint> GridDomain;
+		// end case parameters
+
+		container per_tile := for_each_ne(bladen/name, 'lees_tile(' + quote(bladen/AHN_UNIT) + ')');
+
+		template lees_tile
+		{
+			// begin case parameters
+			parameter<string> tile;
+			// end case parameters
+
+			unit<ipoint> grid
+			:	StorageName     = "='%AHNDrive%/' + Brondata/AHN456/AHN_version + '/DSM/' + tile + '_src.tif'"
+			,	StorageType     = "gdal.grid"
+			,	StorageReadOnly = "True"
+			,	DialogData      = "point_rd"
+			{
+				attribute<uint8> GridData;
+			}
+		}
+
+		attribute<uint8> bron (GridDomain) :=
+			='raster_merge(GridDomain, uint8, ' + asList('per_tile/' + bladen/name + '/grid/GridData', ',') + ')';
 	}
 
 	#include<bepaal_hoogtes_en_daken.dms>
@@ -124,13 +178,13 @@ container bag_blad
 
 		attribute<pand_met_woning> buffer (GridDomain) := isDefined(pand_met_woning_rel) ? (0 / 0)[pand_met_woning] : pand_met_woning_met_buffer;
 
-		unit<uint64> buffer_points := Subset(isDefined(buffer) && isDefined(hoogte_int_offset))
+		unit<uint64> buffer_points := select_with_org_rel(isDefined(buffer) && isDefined(hoogte_int_offset))
 		,	DialogType = "Map"
 		,	DialogData = "point"
 		{
-			attribute<point_rd>        point               := nr_OrgEntity[point_rd];
-			attribute<pand_met_woning> pand_met_woning_rel := buffer[nr_OrgEntity];
-			attribute<cm_uint16>       hoogte_offset       := hoogte_int_offset[nr_OrgEntity];
+			attribute<point_rd>        point               := org_rel[point_rd];
+			attribute<pand_met_woning> pand_met_woning_rel := buffer[org_rel];
+			attribute<cm_uint16>       hoogte_offset       := hoogte_int_offset[org_rel];
 		}
 	}
 }
