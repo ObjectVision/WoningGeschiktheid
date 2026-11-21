@@ -158,11 +158,15 @@ container BAG
 
 		attribute<uint32> nr_woningen               := sum(vbo/gebruiksdoelen/woon   ? 1 : 0, BAG/vbo/pand_rel);
 
-		// Studiegebiedfilter: de eerste 4 posities van een BAG pand-id zijn de gemeentecode.
+		// Studiegebiedfilter: het pand ligt (centroid) in een gemeente van het studiegebied.
+		// Niet via de eerste 4 posities van het pand-id: dat is de gemeente die het id uitgaf en
+		// na een herindeling blijft de oude code staan (Beekdaelen: 0881/0951/0962, Eijsden-Margraten:
+		// 0905/0936), die CBS 2026 niet meer kent.
 		// Dit is de enige plek waar de omvang van de hele berekening wordt bepaald: bag_blad,
 		// de AHN-tegelselectie en alle afgeleide .fss volgen hieruit.
 		attribute<string> gemeentecode              := substr(identificatie, 0, 4);
-		attribute<bool>   in_studiegebied           := IsDefined(rlookup(gemeentecode, studiegebied/gemeente/code));
+		attribute<uint32> cbs_gemeente_rel          := point_in_polygon(centroid_or_mid(geometry), CBS/gemeente_niet_gegeneraliseerd/geometry);
+		attribute<bool>   in_studiegebied           := IsDefined(rlookup(CBS/gemeente_niet_gegeneraliseerd/statcode[cbs_gemeente_rel], studiegebied/gemeente/gm_code));
 
 		attribute<bool>   heeft_woningen            := nr_woningen > 0 && in_studiegebied;
 		attribute<bool>   is_meergezins             := nr_woningen > 1;

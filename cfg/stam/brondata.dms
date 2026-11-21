@@ -140,6 +140,12 @@ container Brondata: Using = "Eenheden;Klassificaties;Geografie"
 		{
 			attribute<point_rd> geometry (poly);
 		}
+
+		unit<uint32> gemeente_niet_gegeneraliseerd
+		{
+			attribute<point_rd> geometry (poly);
+			attribute<string>   statcode;
+		}
 	}
 
 	// Studiegebied: alle gemeenten in een provincie. Verbreden/versmallen = alleen pv_code aanpassen.

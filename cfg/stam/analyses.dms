@@ -141,6 +141,9 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 			attribute<uint32>        woningen_geschikt_MeergezinsMetLift                        := geschikt/MeergezinsMetLift;
 
 			attribute<bool>          geschiktheid_niet_bepaald                                  := ongeschikt/totaal + aanpasbaar/totaal + geschikt/totaal <> nr_woningen;
+			// controle na elke run: aantal panden waar de klassen samen meer/minder woningen tellen dan er zijn
+			parameter<uint32>        nr_panden_overtelling                                      := sum(woningen_totaal > nr_woningen ? 1 : 0);
+			parameter<uint32>        nr_panden_ondertelling                                     := sum(woningen_totaal < nr_woningen ? 1 : 0);
 
 			container ongeschikt
 			{
@@ -162,7 +165,9 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 			container aanpasbaar
 			{
 				attribute<uint32> totaal (pand_met_woning) := 
-					!is_meergezins && (sum_vbo_oppervlaktes >= 85[m2] || !has_beukmaat_510_kleiner) && !geschikt/Bungalow && !ongeschikt/KlassiekeWinkelstraat
+					// klassen wederzijds uitsluitend: smalle beukmaat (BeukmaatTeKlein) gaat voor op aanpasbaar,
+					// anders telden kleine smalle eengezinswoningen met gebruiksoppervlak >= 85 m2 dubbel
+					!is_meergezins && (sum_vbo_oppervlaktes >= 85[m2] || !has_beukmaat_510_kleiner) && !geschikt/Bungalow && !ongeschikt/KlassiekeWinkelstraat && ongeschikt/BeukmaatTeKlein == 0
 					?	nr_woningen
 					:	0;
 			}
@@ -215,9 +220,9 @@ container Analyses: Using = "Eenheden;Klassificaties;Brondata;Geografie"
 				attribute<bool>                 waarschijnlijk_lift_WooN     (pand_met_woning) := switch(
 						case(bouwjaar >= 1000[jaar] && bouwjaar < 1945[jaar] && nr_bouwlagen > 6[verdieping],true)
 					,	case(bouwjaar >= 1945[jaar] && bouwjaar < 1960[jaar] && nr_bouwlagen > 5[verdieping],true)
-					,	case(bouwjaar >= 1960[jaar] && bouwjaar < 1969[jaar] && nr_bouwlagen > 4[verdieping],true)
-					,	case(bouwjaar >= 1970[jaar] && bouwjaar < 1979[jaar] && nr_bouwlagen > 3[verdieping],true)
-					,	case(bouwjaar >= 1980[jaar] && bouwjaar < 1989[jaar] && nr_bouwlagen > 3[verdieping],true)
+					,	case(bouwjaar >= 1960[jaar] && bouwjaar < 1970[jaar] && nr_bouwlagen > 4[verdieping],true)
+					,	case(bouwjaar >= 1970[jaar] && bouwjaar < 1980[jaar] && nr_bouwlagen > 3[verdieping],true)
+					,	case(bouwjaar >= 1980[jaar] && bouwjaar < 1990[jaar] && nr_bouwlagen > 3[verdieping],true)
 					,	case(bouwjaar >= 1990[jaar] && nr_bouwlagen > 1[verdieping],true)
 					, false
 					);
