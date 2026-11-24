@@ -149,17 +149,19 @@ container Brondata: Using = "Eenheden;Klassificaties;Geografie"
 	}
 
 	// Studiegebied: alle gemeenten in een provincie. Verbreden/versmallen = alleen pv_code aanpassen.
+	// pv_code 'NL' = alle gemeenten van Nederland.
 	container studiegebied
 	{
-		parameter<string> pv_code := 'PV31';   // PV31 = Limburg
+		parameter<string> pv_code := 'NL';   // PV31 = Limburg, NL = heel Nederland
+		parameter<bool>   heel_nl := pv_code == 'NL';
 
-		unit<uint32> gemeente := select_with_attr_by_org_rel(CBS/gebiedsindelingen_register, CBS/gebiedsindelingen_register/pv_code == pv_code)
+		unit<uint32> gemeente := select_with_attr_by_org_rel(CBS/gebiedsindelingen_register, heel_nl || CBS/gebiedsindelingen_register/pv_code == pv_code)
 		{
 			// gm_code wordt door select_with_attr_by_org_rel meegenomen
 			attribute<string> code := substr(gm_code, 2, 4);   // 'GM0957' -> '0957', gelijk aan de eerste 4 posities van een BAG pand-id
 		}
 
-		unit<uint32> provincie := select_with_attr_by_org_rel(CBS/provincie_gegeneraliseerd, CBS/provincie_gegeneraliseerd/statcode == pv_code)
+		unit<uint32> provincie := select_with_attr_by_org_rel(CBS/provincie_gegeneraliseerd, heel_nl || CBS/provincie_gegeneraliseerd/statcode == pv_code)
 		,	DialogType = "Map"
 		,	DialogData = "geometry";
 	}

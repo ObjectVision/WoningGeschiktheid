@@ -17,16 +17,44 @@ container AHN456
 
 	parameter<string> AHN_version := 'AHN4_AHN5_AHN6';
 
-	unit<uint32> blad
+	// De geometrie in de gpkg is sinds de versie van 2026-10-20 een LINESTRING (cel-omtrek) i.p.v. een polygoon.
+	// Daarom wordt de polygoon opgebouwd uit de celgrenzen; werkt voor beide gpkg-versies.
+	unit<uint32> blad_src
 	:	StorageName     = "='%AHNDrive%/' + AHN_version + '_combination.gpkg'"
 	,	StorageType     = "gdal.vect"
 	,	StorageReadOnly = "True"
 	,	KeepData        = "True"
+	{
+		attribute<float64>  cell_lower_x;
+		attribute<float64>  cell_lower_y;
+		attribute<float64>  cell_upper_x;
+		attribute<float64>  cell_upper_y;
+		attribute<string>   name;                                     // 'cell_<i>_<j>'
+	}
+
+	unit<uint32> blad := blad_src
 	,	DialogType      = "Map"
 	,	DialogData      = "geometry"
 	{
-		attribute<point_rd> geometry (poly);
-		attribute<string>   name;                                     // 'cell_<i>_<j>'
+		attribute<m> x_min := blad_src/cell_lower_x[m];
+		attribute<m> y_min := blad_src/cell_lower_y[m];
+		attribute<m> x_max := blad_src/cell_upper_x[m];
+		attribute<m> y_max := blad_src/cell_upper_y[m];
+
+		unit<uint32> pointset := union_unit(., ., ., ., .)
+		{
+			attribute<point_rd> point := union_data(.
+				, point_xy(x_min, y_max, point_rd)
+				, point_xy(x_max, y_max, point_rd)
+				, point_xy(x_max, y_min, point_rd)
+				, point_xy(x_min, y_min, point_rd)
+				, point_xy(x_min, y_max, point_rd)
+			);
+			attribute<uint32> sequence := id(.) % #blad;
+			attribute<blad>   ordinal  := value(id(.) / #blad, blad);
+		}
+		attribute<point_rd> geometry (poly) := points2Sequence(pointset/point, value(pointset/sequence, blad), pointset/ordinal);
+		attribute<string>   name                 := blad_src/name;
 		attribute<string>   unit                 := name;              // owo-vocabulaire: 'unit' is de bladnaam
 		attribute<ipoint>   geometry_ipol (poly) := ipolygon(geometry);
 
